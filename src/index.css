@@ -1,0 +1,351 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 214 32% 96%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 216 61% 25%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 246 80% 67%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 214 32% 91%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 214 32% 91%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 217 91% 60%;
+    --radius: 0.625rem;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 216 61% 25%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 214 32% 91%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 88%;
+    --sidebar-ring: 217 91% 60%;
+    
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.45);
+    --glass-shadow: 0 8px 32px rgba(26, 58, 107, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    --glass-bg-dark: rgba(15, 23, 42, 0.65);
+    --glass-border-dark: rgba(255, 255, 255, 0.08);
+    --glass-shadow-dark: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 246 80% 67%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 217 91% 60%;
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-glass bg-white/70 border border-white/45 rounded-2xl;
+    box-shadow: 0 8px 32px rgba(26, 58, 107, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  
+  .glass-dark {
+    @apply backdrop-blur-glass bg-slate-900/65 border border-white/[0.08] rounded-2xl;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  
+  .glass-lg {
+    @apply backdrop-blur-glass-lg bg-white/75 border border-white/50 rounded-3xl;
+    box-shadow: 0 16px 48px rgba(26, 58, 107, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  }
+  
+  .glass-lg-dark {
+    @apply backdrop-blur-glass-lg bg-slate-900/75 border border-white/[0.1] rounded-3xl;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  
+  .glass-input {
+    @apply bg-white/60 border border-slate-900/10 rounded-xl px-4 h-12 text-sm;
+    @apply dark:bg-slate-900/50 dark:border-white/[0.08] dark:text-slate-100;
+    @apply focus:outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/15;
+    @apply transition-all duration-200;
+  }
+  
+  .glass-input-lg {
+    @apply glass-input h-14 text-base;
+  }
+  
+  .glass-btn {
+    @apply backdrop-blur-glass bg-white/80 border border-white/50 rounded-2xl px-6 py-3;
+    @apply text-sm font-medium text-slate-900;
+    @apply hover:bg-white/90 hover:-translate-y-0.5;
+    @apply transition-all duration-300;
+    box-shadow: 0 4px 16px rgba(26, 58, 107, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+  
+  .gradient-btn {
+    @apply relative overflow-hidden rounded-2xl px-6 py-3 text-sm font-semibold text-white;
+    @apply bg-gradient-to-br from-royal-500 to-blue-500;
+    @apply hover:-translate-y-0.5 hover:shadow-glass-lg;
+    @apply active:scale-[0.98];
+    @apply transition-all duration-300;
+  }
+  
+  .gradient-btn-purple {
+    @apply gradient-btn from-purple-accent to-purple-light;
+  }
+  
+  .gradient-btn-green {
+    @apply gradient-btn from-emerald-500 to-emerald-600;
+  }
+  
+  .gradient-btn-amber {
+    @apply gradient-btn from-amber-500 to-amber-600;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-br from-royal-500 via-blue-500 to-purple-accent bg-clip-text text-transparent;
+  }
+  
+  .sidebar-glass {
+    background: linear-gradient(180deg, rgba(26, 58, 107, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+    backdrop-filter: blur(40px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+  }
+  
+  .sidebar-item {
+    @apply flex items-center gap-3 px-5 h-12 rounded-xl text-sm font-medium;
+    @apply text-white/60 hover:text-white hover:bg-white/[0.04];
+    @apply transition-all duration-200;
+  }
+  
+  .sidebar-item-active {
+    @apply sidebar-item text-white;
+    background: linear-gradient(90deg, rgba(37, 99, 235, 0.2) 0%, transparent 100%);
+    border-left: 3px solid #2563EB;
+  }
+  
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+  
+  .status-badge-green {
+    @apply status-badge bg-emerald-500/10 text-emerald-500;
+  }
+  
+  .status-badge-amber {
+    @apply status-badge bg-amber-500/10 text-amber-500;
+  }
+  
+  .status-badge-red {
+    @apply status-badge bg-red-500/10 text-red-500;
+  }
+  
+  .status-badge-blue {
+    @apply status-badge bg-blue-500/10 text-blue-500;
+  }
+  
+  .status-badge-purple {
+    @apply status-badge bg-purple-500/10 text-purple-accent;
+  }
+  
+  .status-badge-gray {
+    @apply status-badge bg-slate-500/10 text-slate-500;
+  }
+  
+  .band-badge-peniel {
+    @apply status-badge bg-blue-500/10 text-blue-500;
+  }
+  
+  .band-badge-judah {
+    @apply status-badge bg-purple-500/10 text-purple-accent;
+  }
+  
+  .band-badge-zion {
+    @apply status-badge bg-emerald-500/10 text-emerald-500;
+  }
+  
+  .band-badge-ephraim {
+    @apply status-badge bg-amber-500/10 text-amber-500;
+  }
+  
+  .band-badge-none {
+    @apply status-badge bg-slate-500/10 text-slate-500;
+  }
+  
+  .group-badge-a {
+    @apply status-badge bg-red-500/10 text-red-500;
+  }
+  
+  .group-badge-b {
+    @apply status-badge bg-blue-500/10 text-blue-500;
+  }
+  
+  .group-badge-c {
+    @apply status-badge bg-emerald-500/10 text-emerald-500;
+  }
+  
+  .group-badge-d {
+    @apply status-badge bg-amber-500/10 text-amber-500;
+  }
+  
+  .group-badge-e {
+    @apply status-badge bg-slate-500/10 text-slate-500;
+  }
+  
+  .floating-orb {
+    @apply absolute rounded-full pointer-events-none;
+    background: radial-gradient(circle, rgba(108, 92, 231, 0.12) 0%, transparent 70%);
+    backdrop-filter: blur(20px);
+  }
+  
+  .page-transition-overlay {
+    @apply fixed inset-0 z-[9999];
+    background: linear-gradient(135deg, #1A3A6B, #2563EB);
+  }
+  
+  .gradient-border-qr {
+    padding: 4px;
+    border-radius: 20px;
+    background: conic-gradient(from 0deg, #1A3A6B, #6C5CE7, #2563EB, #1A3A6B);
+    animation: spin-slow 4s linear infinite;
+  }
+  
+  .scan-line {
+    stroke-dasharray: 100;
+    animation: scan 2s ease-in-out infinite;
+  }
+  
+  .checkmark-draw {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+  }
+  
+  .checkmark-draw.animate {
+    animation: draw 0.6s ease-out 0.3s forwards;
+  }
+  
+  .shimmer-bg {
+    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,0.1) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+  
+  .glass-modal {
+    @apply backdrop-blur-glass-lg bg-white/85 border border-white/30 rounded-3xl;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+  }
+  
+  .glass-modal-dark {
+    @apply backdrop-blur-glass-lg bg-slate-900/90 border border-white/[0.12] rounded-3xl;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.2);
+    border-radius: 3px;
+  }
+  
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Print styles for ID card */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+  
+  body {
+    background: white !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+}
+
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+}
