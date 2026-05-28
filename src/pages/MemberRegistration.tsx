@@ -12,12 +12,11 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
-import churchLogo from '@/assets/church-logo.png';
 import youthLogo from '@/assets/youth-logo.png';
+import { ConventionTag } from '@/components/ConventionTag';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/contexts/ToastContext';
-import { BAND_COLORS, BAND_LIST, BRANCH_LIST, DEPARTMENT_LIST, GROUP_COLORS } from '@/types';
+import { BAND_COLORS, BAND_LIST, BRANCH_LIST, DEPARTMENT_LIST } from '@/types';
 import type { Department, FellowshipBand, Member } from '@/types';
 
 const steps = ['Identity', 'Church', 'First timer', 'Tag'];
@@ -80,6 +79,16 @@ function drawCoverImage(context: CanvasRenderingContext2D, image: HTMLImageEleme
   context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
 }
 
+function drawContainImage(context: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, width: number, height: number) {
+  const scale = Math.min(width / image.width, height / image.height);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  const drawX = x + (width - drawWidth) / 2;
+  const drawY = y + (height - drawHeight) / 2;
+
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+}
+
 function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
   context.beginPath();
   context.moveTo(x + radius, y);
@@ -128,121 +137,188 @@ function setFittedFont(context: CanvasRenderingContext2D, weight: number, size: 
   } while (nextSize >= minSize);
 }
 
-function drawInfoBlock(context: CanvasRenderingContext2D, label: string, value: string, x: number, y: number, maxWidth: number) {
-  context.fillStyle = '#475569';
-  context.font = '700 24px Inter, Arial, sans-serif';
-  context.fillText(label.toUpperCase(), x, y);
-  context.fillStyle = '#0f172a';
-  context.font = '800 31px Inter, Arial, sans-serif';
-  drawWrappedText(context, value || '-', x, y + 43, maxWidth, 36, 2);
-}
-
-async function createTagImage(member: Member, qrSvg: SVGSVGElement | null) {
+async function createTagImage(member: Member, _qrSvg: SVGSVGElement | null) {
   const canvas = document.createElement('canvas');
-  canvas.width = 1040;
-  canvas.height = 1560;
+  canvas.width = 1184;
+  canvas.height = 2008;
   const context = canvas.getContext('2d');
 
   if (!context) throw new Error('Unable to create tag image.');
 
-  const qrData = qrSvg
-    ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(qrSvg))}`
-    : '';
   const imagePromises = [
     loadCanvasImage(youthLogo),
-    loadCanvasImage(churchLogo),
     member.profilePhoto ? loadCanvasImage(member.profilePhoto) : Promise.resolve(null),
-    qrData ? loadCanvasImage(qrData) : Promise.resolve(null),
   ] as const;
 
-  const [youth, church, photo, qr] = await Promise.all(imagePromises);
-  const groupColor = GROUP_COLORS[member.conventionGroup];
-  const safeDepartments = member.departments.join(', ') || 'None';
+  const [youth, photo] = await Promise.all(imagePromises);
+  const teal = '#069d92';
+  const brightTeal = '#08b8ad';
+  const orange = '#ff9f00';
+  const charcoal = '#484848';
+
+  const drawRing = (x: number, y: number, radius: number) => {
+    context.save();
+    context.fillStyle = brightTeal;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = '#f7f7f7';
+    context.beginPath();
+    context.arc(x, y, radius - 28, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = charcoal;
+    context.beginPath();
+    context.arc(x, y, radius - 58, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  };
+
+  const drawDotGrid = (x: number, y: number, width: number, height: number) => {
+    context.fillStyle = charcoal;
+    for (let dotY = y + 6; dotY < y + height; dotY += 28) {
+      for (let dotX = x + 6; dotX < x + width; dotX += 28) {
+        context.beginPath();
+        context.arc(dotX, dotY, 7, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+  };
+
+  const drawStripes = (x: number, y: number, width: number, height: number) => {
+    context.save();
+    context.beginPath();
+    context.rect(x, y, width, height);
+    context.clip();
+    context.strokeStyle = orange;
+    context.lineWidth = 12;
+    for (let offset = -height; offset < width + height; offset += 38) {
+      context.beginPath();
+      context.moveTo(x + offset, y);
+      context.lineTo(x + offset + height, y + height);
+      context.stroke();
+    }
+    context.restore();
+  };
+
+  const drawDiamond = (cx: number, cy: number, size: number) => {
+    context.save();
+    context.translate(cx, cy);
+    context.rotate(Math.PI / 4);
+    context.fillStyle = '#54b8ad';
+    context.fillRect(-size * 0.28, -size * 0.28, size * 0.56, size * 0.56);
+    context.strokeStyle = orange;
+    context.lineWidth = 7;
+    context.strokeRect(-size / 2, -size / 2, size, size);
+    context.strokeRect(-size * 0.34, -size * 0.34, size * 0.68, size * 0.68);
+    context.restore();
+  };
 
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, canvas.width, canvas.height);
-
-  const sideGradient = context.createLinearGradient(0, 0, 0, canvas.height);
-  sideGradient.addColorStop(0, '#a0bb38');
-  sideGradient.addColorStop(0.55, '#d9bd73');
-  sideGradient.addColorStop(1, '#e6c47a');
-  context.fillStyle = sideGradient;
-  context.fillRect(898, 0, 142, canvas.height);
-  context.fillStyle = '#f04b23';
-  context.beginPath();
-  context.moveTo(1040, 1315);
-  context.lineTo(1040, 1560);
-  context.lineTo(890, 1560);
-  context.closePath();
-  context.fill();
-
-  context.drawImage(youth, 70, 58, 142, 118);
-  context.drawImage(church, 792, 50, 130, 130);
-
-  context.fillStyle = '#075d8c';
-  context.font = '900 58px Poppins, Arial, sans-serif';
-  context.textAlign = 'center';
-  context.fillText('Youth Convention', 520, 140);
-  context.fillStyle = '#475569';
-  context.font = '700 22px Inter, Arial, sans-serif';
-  context.fillText('MOSYF 2026 ACCESS TAG', 520, 178);
-
+  context.fillStyle = '#f7f7f7';
+  context.fillRect(0, 0, canvas.width, canvas.height);
   context.save();
-  context.beginPath();
-  context.arc(446, 482, 228, 0, Math.PI * 2);
-  context.fillStyle = '#e5f7ff';
-  context.fill();
-  context.lineWidth = 24;
-  context.strokeStyle = groupColor;
-  context.stroke();
-  context.clip();
-  if (photo) {
-    drawCoverImage(context, photo, 218, 254, 456, 456);
+  context.strokeStyle = 'rgba(226,226,226,0.58)';
+  context.lineWidth = 30;
+  for (let offset = -canvas.height; offset < canvas.width; offset += 72) {
+    context.beginPath();
+    context.moveTo(offset, 0);
+    context.lineTo(offset + canvas.height, canvas.height);
+    context.stroke();
   }
   context.restore();
 
-  roundedRect(context, 704, 378, 158, 150, 24);
-  context.fillStyle = groupColor;
-  context.fill();
-  context.fillStyle = '#ffffff';
-  context.textAlign = 'center';
-  context.font = '800 20px Poppins, Arial, sans-serif';
-  context.fillText('ASSIGNED', 783, 426);
-  context.font = '900 86px Poppins, Arial, sans-serif';
-  context.fillText(member.conventionGroup.replace('Group ', ''), 783, 508);
-
-  context.fillStyle = '#000000';
+  drawContainImage(context, youth, 72, 48, 124, 124);
+  context.save();
+  context.fillStyle = '#0b4a43';
   context.textAlign = 'left';
-  setFittedFont(context, 900, 72, 'Poppins, Arial, sans-serif', member.fullName.toUpperCase(), 760, 46);
-  drawWrappedText(context, member.fullName.toUpperCase(), 92, 812, 760, 76, 2);
+  context.textBaseline = 'middle';
+  setFittedFont(context, 600, 44, '"Brush Script MT", "Segoe Script", cursive', 'Youth convention 2026', 370, 34);
+  context.fillText('Youth convention 2026', 212, 110);
+  context.restore();
 
-  const bandLabel = member.fellowshipBand.toUpperCase();
-  context.font = '800 34px Inter, Arial, sans-serif';
-  const bandWidth = Math.min(390, Math.max(210, context.measureText(bandLabel).width + 52));
-  roundedRect(context, 92, 986, bandWidth, 64, 10);
-  context.fillStyle = '#000000';
+  drawRing(1078, -34, 108);
+  drawRing(640, 88, 108);
+  drawRing(592, 1872, 108);
+  drawRing(168, 1986, 108);
+  drawDotGrid(774, 0, 148, 174);
+  drawDotGrid(306, 1880, 160, 126);
+  drawStripes(912, 88, 272, 140);
+  drawStripes(0, 1740, 326, 140);
+  drawDiamond(-58, 1128, 298);
+  drawDiamond(1220, 620, 298);
+  context.fillStyle = brightTeal;
+  context.beginPath();
+  context.arc(864, 186, 42, 0, Math.PI * 2);
+  context.fill();
+  context.beginPath();
+  context.arc(352, 1788, 42, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = '#0b4a43';
+  context.font = '600 48px Poppins, Arial, sans-serif';
+  context.textAlign = 'center';
+  context.fillText(member.conventionGroup.toUpperCase(), 592, 312);
+
+  context.fillStyle = charcoal;
+  context.fillRect(300, 330, 580, 920);
+  context.fillStyle = '#f7f7f7';
+  context.fillRect(370, 352, 440, 44);
+  context.fillRect(326, 398, 528, 820);
+  if (photo) {
+    drawCoverImage(context, photo, 326, 398, 528, 820);
+  }
+  context.fillStyle = charcoal;
+  context.beginPath();
+  context.moveTo(880, 1010);
+  context.lineTo(880, 1250);
+  context.lineTo(586, 1250);
+  context.closePath();
+  context.fill();
+
+  context.beginPath();
+  context.moveTo(258, 1312);
+  context.lineTo(1008, 1312);
+  context.lineTo(940, 1534);
+  context.lineTo(226, 1534);
+  context.closePath();
+  context.fillStyle = teal;
   context.fill();
   context.fillStyle = '#ffffff';
-  context.fillText(bandLabel, 118, 1029);
+  context.font = '900 60px Poppins, Arial, sans-serif';
+  setFittedFont(context, 900, 60, 'Poppins, Arial, sans-serif', member.fullName.toUpperCase(), 650, 36);
+  drawWrappedText(context, member.fullName.toUpperCase(), 592, 1408, 650, 62, 2);
 
-  drawInfoBlock(context, 'Department', safeDepartments, 92, 1134, 510);
-  drawInfoBlock(context, 'ID number', member.id, 92, 1262, 510);
-
-  context.fillStyle = '#f8fafc';
-  roundedRect(context, 628, 1060, 230, 340, 24);
+  context.beginPath();
+  context.moveTo(246, 1448);
+  context.lineTo(982, 1482);
+  context.lineTo(936, 1582);
+  context.lineTo(288, 1604);
+  context.closePath();
+  context.fillStyle = orange;
   context.fill();
-  context.strokeStyle = '#e2e8f0';
-  context.lineWidth = 2;
-  context.stroke();
-  drawInfoBlock(context, 'Group', member.conventionGroup, 656, 1124, 174);
-  drawInfoBlock(context, 'Registered', formatRegistrationDate(member.registeredAt), 656, 1248, 174);
+  context.fillStyle = '#334155';
+  context.font = '900 43px Poppins, Arial, sans-serif';
+  setFittedFont(context, 900, 43, 'Poppins, Arial, sans-serif', member.fellowshipBand.toUpperCase(), 460, 30);
+  context.fillText(member.fellowshipBand.toUpperCase(), 592, 1542);
 
-  if (qr) {
-    context.fillStyle = '#ffffff';
-    roundedRect(context, 682, 1306, 132, 132, 16);
-    context.fill();
-    context.drawImage(qr, 696, 1320, 104, 104);
-  }
+  context.fillStyle = teal;
+  roundedRect(context, 376, 1628, 428, 82, 14);
+  context.fill();
+  context.fillStyle = '#ffffff';
+  context.font = '800 34px Inter, Arial, sans-serif';
+  context.fillText(`ID : ${member.id.replace(/^MOSYF-2026-/, '')}`, 590, 1681);
+
+  context.strokeStyle = '#0b4a43';
+  context.lineWidth = 5;
+  context.beginPath();
+  context.moveTo(758, 1918);
+  context.lineTo(1134, 1918);
+  context.stroke();
+  context.fillStyle = '#0b4a43';
+  context.font = 'italic 28px Georgia, serif';
+  context.textAlign = 'center';
+  context.fillText('Youth Exco Signature', 956, 1974);
 
   return canvas.toDataURL('image/png');
 }
@@ -807,65 +883,5 @@ function DecisionCard({ selected, title, description, onClick }: { selected: boo
       </span>
       <span className={selected ? 'mt-2 block text-sm text-white/80' : 'mt-2 block text-sm text-slate-500'}>{description}</span>
     </motion.button>
-  );
-}
-
-function ConventionTag({ member, refProp }: { member: Member; refProp?: React.RefObject<HTMLDivElement | null> }) {
-  const groupColor = GROUP_COLORS[member.conventionGroup];
-  const qrValue = `${window.location.origin}${window.location.pathname}#/qr/${member.id}`;
-
-  return (
-    <div ref={refProp} className="mx-auto w-full max-w-[520px] overflow-hidden rounded-[30px] bg-white text-slate-950 shadow-2xl print:shadow-none" id="convention-tag">
-      <div className="relative min-h-[780px] p-7">
-        <div className="absolute inset-y-0 right-0 w-[74px] bg-[#d9bd73]" />
-        <div className="absolute bottom-0 right-0 h-40 w-28 bg-[#f04b23]" style={{ clipPath: 'polygon(100% 0, 100% 100%, 0 100%)' }} />
-        <div className="absolute right-[24px] top-[420px] rotate-90 text-4xl font-black tracking-[0.28em] text-[#075d8c]">MOSYF</div>
-
-        <div className="relative z-10">
-          <div className="flex items-center justify-between pr-20">
-            <img src={youthLogo} alt="Youth Fellowship logo" className="h-24 w-24 object-contain" />
-            <div className="text-center text-[#075d8c]">
-              <p className="text-4xl font-black leading-none">Youth Convention</p>
-            </div>
-            <img src={churchLogo} alt="Mountain of Solution logo" className="h-24 w-24 object-contain" />
-          </div>
-
-          <div className="mt-8 flex items-center justify-center gap-5 pr-20">
-            <div className="relative grid h-64 w-64 shrink-0 place-items-center overflow-hidden rounded-full border-[14px] bg-[#e2f6ff]" style={{ borderColor: groupColor }}>
-              {member.profilePhoto ? (
-                <img src={member.profilePhoto} alt={member.fullName} className="h-full w-full object-cover" />
-              ) : (
-                <UserRound className="h-20 w-20 text-slate-300" />
-              )}
-            </div>
-            <div className="rounded-2xl px-4 py-3 text-center text-white" style={{ background: groupColor }}>
-              <p className="text-xs font-bold uppercase tracking-[0.18em]">Assigned</p>
-              <p className="text-4xl font-black">{member.conventionGroup.replace('Group ', '')}</p>
-            </div>
-          </div>
-
-          <div className="mt-8 pr-20">
-            <p className="break-words text-5xl font-black uppercase leading-[0.95] tracking-normal">{member.fullName}</p>
-          </div>
-
-          <div className="mt-6 grid grid-cols-[1fr_132px] gap-5 pr-20">
-            <div>
-              <div className="inline-flex bg-black px-4 py-2 text-lg font-bold uppercase text-white">{member.fellowshipBand}</div>
-              <div className="mt-4 space-y-2 text-sm">
-                <p className="text-2xl font-medium text-slate-900">Department</p>
-                <p className="text-xl font-black text-slate-950">{member.departments.join(', ')}</p>
-                <p className="pt-3 text-xl font-medium text-slate-900">Registration date</p>
-                <p className="text-lg font-bold text-slate-950">{formatRegistrationDate(member.registeredAt)}</p>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center">
-              <QRCodeSVG value={qrValue} size={104} />
-              <p className="mt-2 break-all font-mono text-[10px] font-bold">{member.id}</p>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
   );
 }
