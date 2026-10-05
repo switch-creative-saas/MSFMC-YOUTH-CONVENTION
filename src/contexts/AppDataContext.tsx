@@ -13,9 +13,20 @@ import type {
   ConventionGroup,
   GeneratedLink,
   VerificationMethod,
+  Band,
+  DepartmentItem,
+  ChurchGroup,
+  ChurchLocation,
+  Programme,
+  ConventionRole,
+  ConventionRoleName,
+  Department,
 } from '@/types';
+import { localStorageRepository } from '@/lib/repository';
+import { assignConventionGroup as assignLeastPopulatedGroup } from '@/lib/groups';
 
 interface AppDataContextType {
+  currentEventId: string;
   members: Member[];
   executives: Executive[];
   attendance: AttendanceRecord[];
@@ -25,6 +36,14 @@ interface AppDataContextType {
   firstTimers: FirstTimer[];
   conventionSettings: ConventionSettings;
   generatedLinks: GeneratedLink[];
+  bands: Band[];
+  departments: DepartmentItem[];
+  churchGroups: ChurchGroup[];
+  churchLocations: ChurchLocation[];
+  programmes: Programme[];
+  conventionRoles: ConventionRole[];
+  findAttendeeByStatusToken: (token: string | undefined) => { type: 'member'; attendee: Member } | { type: 'executive'; attendee: Executive } | null;
+  getStatusUrl: (attendee: Member | Executive) => string;
   addMember: (member: Omit<Member, 'id' | 'conventionGroup' | 'registeredAt' | 'qrCode'>) => Member;
   addExecutive: (executive: Omit<Executive, 'id' | 'registeredAt'>) => Executive;
   addAttendance: (record: Omit<AttendanceRecord, 'id'>) => AttendanceRecord;
@@ -34,6 +53,7 @@ interface AppDataContextType {
   revokeExecutiveAdmin: (executiveId: string, actorEmail: string, actorName: string) => void;
   addFirstTimer: (firstTimer: Omit<FirstTimer, 'id'>) => FirstTimer;
   updateConventionSettings: (settings: Partial<ConventionSettings>) => void;
+  assignExecutiveRole: (executiveId: string, leadershipRole: string, actorEmail: string, actorName: string) => void;
   addGeneratedLink: (link: Omit<GeneratedLink, 'id' | 'createdAt'>) => GeneratedLink;
   validateGeneratedLink: (type: GeneratedLink['type'], token: string | null) => GeneratedLink | null;
   recordGeneratedLinkUse: (id: string) => void;
@@ -42,6 +62,13 @@ interface AppDataContextType {
   updateMember: (id: string, updates: Partial<Member>) => void;
   generateMemberId: () => string;
   assignConventionGroup: (band: FellowshipBand) => ConventionGroup;
+  resetDemoData: () => void;
+  saveListItem: (entity: 'bands' | 'departments' | 'churchGroups' | 'churchLocations', item: Partial<Band> & Pick<Band, 'name'>, actorEmail: string, actorName: string) => void;
+  deleteListItem: (entity: 'bands' | 'departments' | 'churchGroups' | 'churchLocations', id: string, actorEmail: string, actorName: string) => { ok: boolean; message?: string };
+  saveProgramme: (programme: Partial<Programme> & Pick<Programme, 'title' | 'date' | 'startTime' | 'endTime' | 'location'>, actorEmail: string, actorName: string) => void;
+  deleteProgramme: (id: string, actorEmail: string, actorName: string) => void;
+  assignConventionRole: (userEmail: string, role: ConventionRoleName, actorEmail: string, actorName: string) => void;
+  revokeConventionRole: (id: string, actorEmail: string, actorName: string) => void;
 }
 
 const MOCK_MEMBERS: Member[] = [
@@ -140,11 +167,12 @@ const MOCK_FIRST_TIMERS: FirstTimer[] = MOCK_MEMBERS.filter(m => m.isFirstTimer)
 }));
 
 const DEFAULT_SETTINGS: ConventionSettings = {
-  name: "MOSYF National Convention 2026",
-  startDate: "2026-08-15",
-  endDate: "2026-08-17",
+  name: "Mountain of Solution Youth Fellowship Convention 2026",
+  startDate: "2026-10-22",
+  endDate: "2026-10-25",
   location: "Mountain of Solution Headquarters, Lagos",
-  theme: "Arise and Shine",
+  theme: "Walk With Me",
+  scripture: "Micah 6:8",
   isActive: true,
   maxAttendees: 500,
   sessions: [
@@ -165,6 +193,16 @@ const GENERATED_LINKS_STORAGE_KEY = 'mosyf-generated-links';
 const ATTENDANCE_STORAGE_KEY = 'mosyf-attendance';
 const BIOMETRIC_LOGS_STORAGE_KEY = 'mosyf-biometric-logs';
 const ADMIN_ACTIVITIES_STORAGE_KEY = 'mosyf-admin-activities';
+const CONVENTION_SETTINGS_STORAGE_KEY = 'mosyf-convention-settings';
+const STORAGE_ENTITIES = {
+  [MEMBERS_STORAGE_KEY]: 'members',
+  [EXECUTIVES_STORAGE_KEY]: 'executives',
+  [ATTENDANCE_STORAGE_KEY]: 'attendance',
+  [BIOMETRIC_LOGS_STORAGE_KEY]: 'biometricLogs',
+  [ADMIN_ACTIVITIES_STORAGE_KEY]: 'adminActivities',
+  [FIRST_TIMERS_STORAGE_KEY]: 'firstTimers',
+  [GENERATED_LINKS_STORAGE_KEY]: 'generatedLinks',
+} as const;
 
 const DEFAULT_BIOMETRIC_DEVICES: BiometricDevice[] = [
   {
@@ -186,28 +224,77 @@ const DEFAULT_BIOMETRIC_DEVICES: BiometricDevice[] = [
 ];
 
 function readStoredList<T>(key: string, fallback: T[]): T[] {
-  try {
-    const stored = window.localStorage.getItem(key);
-    return stored ? JSON.parse(stored) as T[] : fallback;
-  } catch {
-    return fallback;
-  }
+  const entity = STORAGE_ENTITIES[key as keyof typeof STORAGE_ENTITIES];
+  if (!entity) return fallback;
+  const records = localStorageRepository.list(entity) as T[];
+  return records.length ? records : fallback;
+}
+
+function readStoredValue<T>(key: string, fallback: T): T {
+  if (key !== CONVENTION_SETTINGS_STORAGE_KEY) return fallback;
+  const stored = localStorageRepository.getSettings();
+  return stored ? { ...fallback, ...stored } as T : fallback;
+}
+
+function createSecureToken(prefix: 'mem' | 'exec') {
+  const bytes = new Uint8Array(18);
+  window.crypto?.getRandomValues?.(bytes);
+  const random = Array.from(bytes, byte => byte.toString(36).padStart(2, '0')).join('');
+  return `${prefix}_${random}_${Date.now().toString(36)}`;
+}
+
+function ensureMemberTokens(members: Member[]) {
+  return members.map(member => ({
+    ...member,
+    statusToken: member.statusToken ?? createSecureToken('mem'),
+    qrCode: member.qrCode || member.id,
+    biometricStatus: member.biometricStatus ?? 'pending_verification',
+    accessClaims: member.accessClaims ?? {},
+  }));
+}
+
+function ensureExecutiveTokens(executives: Executive[]) {
+  return executives.map(exec => ({
+    ...exec,
+    statusToken: exec.statusToken ?? createSecureToken('exec'),
+    registrationStatus: exec.registrationStatus ?? 'executive',
+    accessClaims: exec.accessClaims ?? {},
+  }));
 }
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const [members, setMembers] = useState<Member[]>(() => readStoredList<Member>(MEMBERS_STORAGE_KEY, MOCK_MEMBERS));
-  const [executives, setExecutives] = useState<Executive[]>(() => readStoredList<Executive>(EXECUTIVES_STORAGE_KEY, MOCK_EXECUTIVES));
+  const currentEventId = localStorageRepository.currentEventId;
+  const [members, setMembers] = useState<Member[]>(() => ensureMemberTokens(readStoredList<Member>(MEMBERS_STORAGE_KEY, MOCK_MEMBERS)));
+  const [executives, setExecutives] = useState<Executive[]>(() => ensureExecutiveTokens(readStoredList<Executive>(EXECUTIVES_STORAGE_KEY, MOCK_EXECUTIVES)));
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => readStoredList<AttendanceRecord>(ATTENDANCE_STORAGE_KEY, MOCK_ATTENDANCE));
   const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>(() => readStoredList<BiometricLog>(BIOMETRIC_LOGS_STORAGE_KEY, []));
   const [biometricDevices, setBiometricDevices] = useState<BiometricDevice[]>(DEFAULT_BIOMETRIC_DEVICES);
   const [adminActivities, setAdminActivities] = useState<AdminActivityLog[]>(() => readStoredList<AdminActivityLog>(ADMIN_ACTIVITIES_STORAGE_KEY, []));
   const [firstTimers, setFirstTimers] = useState<FirstTimer[]>(() => readStoredList<FirstTimer>(FIRST_TIMERS_STORAGE_KEY, MOCK_FIRST_TIMERS));
-  const [conventionSettings, setConventionSettings] = useState<ConventionSettings>(DEFAULT_SETTINGS);
+  const [conventionSettings, setConventionSettings] = useState<ConventionSettings>(() => readStoredValue<ConventionSettings>(CONVENTION_SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS));
   const [generatedLinks, setGeneratedLinks] = useState<GeneratedLink[]>(() => readStoredList<GeneratedLink>(GENERATED_LINKS_STORAGE_KEY, []));
+  const [bands, setBands] = useState<Band[]>(() => localStorageRepository.list('bands'));
+  const [departments, setDepartments] = useState<DepartmentItem[]>(() => localStorageRepository.list('departments'));
+  const [churchGroups, setChurchGroups] = useState<ChurchGroup[]>(() => localStorageRepository.list('churchGroups'));
+  const [churchLocations, setChurchLocations] = useState<ChurchLocation[]>(() => localStorageRepository.list('churchLocations'));
+  const [programmes, setProgrammes] = useState<Programme[]>(() => localStorageRepository.list('programmes'));
+  const [conventionRoles, setConventionRoles] = useState<ConventionRole[]>(() => localStorageRepository.list('conventionRoles'));
+
+  useEffect(() => {
+    const unsubscribe = localStorageRepository.subscribe(() => {
+    setBands(localStorageRepository.list('bands'));
+    setDepartments(localStorageRepository.list('departments'));
+    setChurchGroups(localStorageRepository.list('churchGroups'));
+    setChurchLocations(localStorageRepository.list('churchLocations'));
+    setProgrammes(localStorageRepository.list('programmes'));
+      setConventionRoles(localStorageRepository.list('conventionRoles'));
+    });
+    return () => { unsubscribe(); };
+  }, []);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(members));
+      localStorageRepository.replace('members', members);
     } catch (error) {
       console.warn('Unable to persist members locally.', error);
     }
@@ -215,7 +302,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(EXECUTIVES_STORAGE_KEY, JSON.stringify(executives));
+      localStorageRepository.replace('executives', executives);
     } catch (error) {
       console.warn('Unable to persist executives locally.', error);
     }
@@ -223,7 +310,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(ATTENDANCE_STORAGE_KEY, JSON.stringify(attendance));
+      localStorageRepository.replace('attendance', attendance);
     } catch (error) {
       console.warn('Unable to persist attendance locally.', error);
     }
@@ -231,7 +318,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(BIOMETRIC_LOGS_STORAGE_KEY, JSON.stringify(biometricLogs));
+      localStorageRepository.replace('biometricLogs', biometricLogs);
     } catch (error) {
       console.warn('Unable to persist biometric logs locally.', error);
     }
@@ -239,7 +326,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(ADMIN_ACTIVITIES_STORAGE_KEY, JSON.stringify(adminActivities));
+      localStorageRepository.replace('adminActivities', adminActivities);
     } catch (error) {
       console.warn('Unable to persist admin activities locally.', error);
     }
@@ -258,7 +345,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(FIRST_TIMERS_STORAGE_KEY, JSON.stringify(firstTimers));
+      localStorageRepository.replace('firstTimers', firstTimers);
     } catch (error) {
       console.warn('Unable to persist first timers locally.', error);
     }
@@ -266,11 +353,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(GENERATED_LINKS_STORAGE_KEY, JSON.stringify(generatedLinks));
+      localStorageRepository.replace('generatedLinks', generatedLinks);
     } catch (error) {
       console.warn('Unable to persist generated links locally.', error);
     }
   }, [generatedLinks]);
+
+  useEffect(() => {
+    try {
+      localStorageRepository.setSettings(conventionSettings);
+    } catch (error) {
+      console.warn('Unable to persist convention settings locally.', error);
+    }
+  }, [conventionSettings]);
 
   const generateMemberId = useCallback(() => {
     const highest = members.reduce((max, member) => {
@@ -282,10 +377,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [members]);
 
   const assignConventionGroup = useCallback((band: FellowshipBand): ConventionGroup => {
-    if (band === 'None') return 'Group E';
-    const groups: ConventionGroup[] = ['Group A', 'Group B', 'Group C', 'Group D'];
-    return groups[Math.floor(Math.random() * groups.length)];
-  }, []);
+    return assignLeastPopulatedGroup(band, members);
+  }, [members]);
 
   const addMember = useCallback((memberData: Omit<Member, 'id' | 'conventionGroup' | 'registeredAt' | 'qrCode'>): Member => {
     const normalizedEmail = memberData.email.trim().toLowerCase();
@@ -300,6 +393,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       id,
       conventionGroup: group,
       registeredAt: new Date().toISOString(),
+      statusToken: createSecureToken('mem'),
       qrCode: id,
       biometricStatus: 'pending_verification',
       accessClaims: {},
@@ -323,7 +417,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ...execData,
       email: normalizedEmail,
       id,
+      statusToken: createSecureToken('exec'),
       registeredAt: new Date().toISOString(),
+      registrationStatus: 'executive',
+      accessClaims: {},
     };
     setExecutives(prev => [...prev, newExec]);
     return newExec;
@@ -458,6 +555,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setConventionSettings(prev => ({ ...prev, ...settings }));
   }, []);
 
+  const assignExecutiveRole = useCallback((executiveId: string, leadershipRole: string, actorEmail: string, actorName: string) => {
+    const executive = executives.find(exec => exec.id === executiveId);
+    if (!executive) return;
+
+    setExecutives(prev => prev.map(exec => exec.id === executiveId ? {
+      ...exec,
+      leadershipRole,
+    } : exec));
+    addAdminActivity(actorEmail, actorName, 'role', `${executive.fullName} assigned role: ${leadershipRole}`);
+  }, [executives, addAdminActivity]);
+
   const addGeneratedLink = useCallback((link: Omit<GeneratedLink, 'id' | 'createdAt'>): GeneratedLink => {
     const id = `LINK-${Date.now()}`;
     const newLink = { ...link, id, createdAt: new Date().toISOString() };
@@ -486,13 +594,82 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
   }, []);
 
+  const resetDemoData = useCallback(() => {
+    localStorageRepository.reset();
+    window.location.reload();
+  }, []);
+
+  const addListActivity = useCallback((actorEmail: string, actorName: string, target: string) => {
+    setAdminActivities(prev => [{ id: crypto.randomUUID(), eventId: currentEventId, actorEmail, actorName, action: 'role' as const, target, createdAt: new Date().toISOString() }, ...prev].slice(0, 80));
+  }, [currentEventId]);
+
+  const saveListItem = useCallback((entity: 'bands' | 'departments' | 'churchGroups' | 'churchLocations', item: Partial<Band> & Pick<Band, 'name'>, actorEmail: string, actorName: string) => {
+    const current = localStorageRepository.list(entity);
+    if (current.some(row => row.name.toLowerCase() === item.name.trim().toLowerCase() && row.id !== item.id)) throw new Error('List names must be unique.');
+    localStorageRepository.write(entity, { ...item, id: item.id ?? crypto.randomUUID(), name: item.name.trim(), active: item.active ?? true, sortOrder: item.sortOrder ?? current.length } as never, actorEmail);
+    addListActivity(actorEmail, actorName, 'Updated ' + entity + ': ' + item.name.trim());
+  }, [addListActivity]);
+
+  const deleteListItem = useCallback((entity: 'bands' | 'departments' | 'churchGroups' | 'churchLocations', id: string, actorEmail: string, actorName: string) => {
+    const records = localStorageRepository.list(entity);
+    const item = records.find(row => row.id === id);
+    if (!item) return { ok: false, message: 'List item not found.' };
+    const referenced = entity === 'bands' ? members.some(row => row.fellowshipBand === item.name) || executives.some(row => row.fellowshipBand === item.name)
+      : entity === 'departments' ? members.some(row => row.departments.includes(item.name as Department)) || executives.some(row => row.department === item.name)
+      : entity === 'churchGroups' ? members.some(row => row.conventionGroup === item.name)
+      : members.some(row => row.churchBranch === item.name);
+    if (referenced) {
+      localStorageRepository.write(entity, { ...item, active: false } as never, actorEmail);
+      addListActivity(actorEmail, actorName, 'Deactivated ' + entity + ': ' + item.name);
+      return { ok: false, message: 'This item is in use and was deactivated instead.' };
+    }
+    localStorageRepository.replace(entity, records.filter(row => row.id !== id));
+    addListActivity(actorEmail, actorName, 'Deleted ' + entity + ': ' + item.name);
+    return { ok: true };
+  }, [addListActivity, executives, members]);
+
+  const saveProgramme = useCallback((programme: Partial<Programme> & Pick<Programme, 'title' | 'date' | 'startTime' | 'endTime' | 'location'>, actorEmail: string, actorName: string) => {
+    localStorageRepository.write('programmes', { ...programme, id: programme.id ?? crypto.randomUUID(), description: programme.description ?? '', active: programme.active ?? true, sortOrder: programme.sortOrder ?? programmes.length } as never, actorEmail);
+    addListActivity(actorEmail, actorName, 'Updated programme: ' + programme.title);
+  }, [addListActivity, programmes.length]);
+  const deleteProgramme = useCallback((id: string, actorEmail: string, actorName: string) => {
+    const programme = programmes.find(row => row.id === id);
+    localStorageRepository.replace('programmes', programmes.filter(row => row.id !== id));
+    if (programme) addListActivity(actorEmail, actorName, 'Deleted programme: ' + programme.title);
+  }, [addListActivity, programmes]);
+  const assignConventionRole = useCallback((userEmail: string, role: ConventionRoleName, actorEmail: string, actorName: string) => {
+    localStorageRepository.write('conventionRoles', { id: crypto.randomUUID(), userEmail: userEmail.toLowerCase(), role, assignedBy: actorEmail, assignedAt: new Date().toISOString() } as never, actorEmail);
+    addListActivity(actorEmail, actorName, 'Assigned ' + role + ' to ' + userEmail);
+  }, [addListActivity]);
+  const revokeConventionRole = useCallback((id: string, actorEmail: string, actorName: string) => {
+    const role = conventionRoles.find(row => row.id === id);
+    localStorageRepository.replace('conventionRoles', conventionRoles.filter(row => row.id !== id));
+    if (role) addListActivity(actorEmail, actorName, 'Revoked ' + role.role + ' from ' + role.userEmail);
+  }, [addListActivity, conventionRoles]);
+
+  const findAttendeeByStatusToken = useCallback((token: string | undefined) => {
+    if (!token) return null;
+    const member = members.find(item => item.statusToken === token);
+    if (member) return { type: 'member' as const, attendee: member };
+    const executive = executives.find(item => item.statusToken === token);
+    if (executive) return { type: 'executive' as const, attendee: executive };
+    return null;
+  }, [executives, members]);
+
+  const getStatusUrl = useCallback((attendee: Member | Executive) => {
+    const token = attendee.statusToken ?? ('conventionGroup' in attendee ? createSecureToken('mem') : createSecureToken('exec'));
+    const basePath = `${window.location.origin}${window.location.pathname}`;
+    return `${basePath}#/convention/status/${token}`;
+  }, []);
+
   return (
     <AppDataContext.Provider value={{
-      members, executives, attendance, biometricLogs, biometricDevices, adminActivities, firstTimers, conventionSettings, generatedLinks,
+      currentEventId, members, executives, attendance, biometricLogs, biometricDevices, adminActivities, firstTimers, conventionSettings, generatedLinks, bands, departments, churchGroups, churchLocations, programmes, conventionRoles,
+      findAttendeeByStatusToken, getStatusUrl,
       addMember, addExecutive, addAttendance, verifyMemberBiometric, claimAccessItem, promoteExecutiveToAdmin, revokeExecutiveAdmin, addFirstTimer,
-      updateConventionSettings, addGeneratedLink, validateGeneratedLink, recordGeneratedLinkUse,
+      updateConventionSettings, assignExecutiveRole, addGeneratedLink, validateGeneratedLink, recordGeneratedLinkUse,
       deleteMember, deleteExecutive, updateMember,
-      generateMemberId, assignConventionGroup,
+      generateMemberId, assignConventionGroup, resetDemoData, saveListItem, deleteListItem, saveProgramme, deleteProgramme, assignConventionRole, revokeConventionRole,
     }}>
       {children}
     </AppDataContext.Provider>

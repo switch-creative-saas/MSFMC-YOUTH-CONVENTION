@@ -17,13 +17,15 @@ import { MemberAttendance } from '@/pages/MemberAttendance';
 import { MemberProfile } from '@/pages/MemberProfile';
 import { MemberRegistration } from '@/pages/MemberRegistration';
 import { ExecutiveRegistration } from '@/pages/ExecutiveRegistration';
+import { ConventionStatusPortal, ConventionStatusSearchPage } from '@/pages/ConventionStatusPortal';
+import { HireDeveloperPage } from '@/pages/HireDeveloperPage';
 import { QRCheckinPage } from '@/pages/QRCheckinPage';
 import { QROnboardingPage } from '@/pages/QROnboardingPage';
 import { MemberLayout } from '@/components/MemberLayout';
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user, role, isLoading } = useAuth();
-  if (isLoading) return <div className="min-h-screen bg-slate-100 dark:bg-[#0B1426] flex items-center justify-center"><div className="w-8 h-8 border-2 border-royal-500/30 border-t-royal-500 rounded-full animate-spin" /></div>;
+  if (isLoading) return <div className="portal-theme portal-canvas min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-portal-line border-t-portal-accent rounded-full animate-spin" /></div>;
   if (!user) return <Navigate to="/login" replace />;
   if (role !== 'super_admin' && role !== 'admin') return <Navigate to="/login" replace />;
   return <>{children}</>;
@@ -31,7 +33,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 function SuperAdminRoute({ children }: { children: React.ReactNode }) {
   const { user, role, isLoading } = useAuth();
-  if (isLoading) return <div className="min-h-screen bg-slate-100 dark:bg-[#0B1426] flex items-center justify-center"><div className="w-8 h-8 border-2 border-royal-500/30 border-t-royal-500 rounded-full animate-spin" /></div>;
+  if (isLoading) return <div className="portal-theme portal-canvas min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-portal-line border-t-portal-accent rounded-full animate-spin" /></div>;
   if (!user) return <Navigate to="/login" replace />;
   if (role !== 'super_admin') return <Navigate to="/admin/dashboard" replace />;
   return <>{children}</>;
@@ -39,7 +41,7 @@ function SuperAdminRoute({ children }: { children: React.ReactNode }) {
 
 function ExecutiveRoute({ children }: { children: React.ReactNode }) {
   const { user, role, isLoading } = useAuth();
-  if (isLoading) return <div className="min-h-screen bg-slate-100 dark:bg-[#0B1426] flex items-center justify-center"><div className="w-8 h-8 border-2 border-purple-accent/30 border-t-purple-accent rounded-full animate-spin" /></div>;
+  if (isLoading) return <div className="portal-theme portal-canvas min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-portal-line border-t-portal-accent rounded-full animate-spin" /></div>;
   if (!user) return <Navigate to="/login" replace />;
   if (role !== 'executive') return <Navigate to="/login" replace />;
   return <>{children}</>;
@@ -47,7 +49,7 @@ function ExecutiveRoute({ children }: { children: React.ReactNode }) {
 
 function MemberRoute({ children }: { children: React.ReactNode }) {
   const { user, role, isLoading } = useAuth();
-  if (isLoading) return <div className="min-h-screen bg-slate-100 dark:bg-[#0B1426] flex items-center justify-center"><div className="w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" /></div>;
+  if (isLoading) return <div className="portal-theme portal-canvas min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-portal-line border-t-portal-accent rounded-full animate-spin" /></div>;
   if (!user) return <Navigate to="/login" replace />;
   if (role !== 'member') return <Navigate to="/login" replace />;
   return <>{children}</>;
@@ -60,6 +62,10 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register/member" element={<MemberRegistration />} />
       <Route path="/register/executive" element={<ExecutiveRegistration />} />
+      <Route path="/convention/status" element={<ConventionStatusSearchPage />} />
+      <Route path="/convention/status/:token" element={<ConventionStatusPortal />} />
+      <Route path="/convention/hire" element={<HireDeveloperPage />} />
+      <Route path="/convention/status/:token/hire" element={<HireDeveloperPage />} />
       <Route path="/qr/:token" element={<QRCheckinPage />} />
       <Route path="/qr-checkin/:token" element={<QROnboardingPage />} />
 

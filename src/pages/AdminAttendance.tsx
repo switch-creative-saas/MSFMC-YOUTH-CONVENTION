@@ -20,6 +20,8 @@ import { useAppData } from '@/contexts/AppDataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { AccessItemType, Member } from '@/types';
+import { PortalInput } from '@/components/ui-kit/FormControls';
+import { usePermission } from '@/hooks/usePermission';
 
 const ACCESS_ITEMS: Array<{ id: AccessItemType; label: string; icon: typeof Utensils }> = [
   { id: 'entry', label: 'Convention Entry', icon: DoorOpen },
@@ -46,6 +48,10 @@ export function AdminAttendance() {
   } = useAppData();
   const { user } = useAuth();
   const { addToast } = useToast();
+  const canVerify = usePermission('verify');
+  const canClaimFood = usePermission('claim_food');
+  const canClaimSouvenir = usePermission('claim_souvenir');
+  const canRecordActivity = usePermission('record_activity');
   const [search, setSearch] = useState('');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -72,8 +78,8 @@ export function AdminAttendance() {
   const scannerPulse = useMemo(() => ({
     scale: scanning ? [1, 1.08, 1] : 1,
     boxShadow: scanning
-      ? ['0 0 0 rgba(16,185,129,0)', '0 0 36px rgba(16,185,129,0.55)', '0 0 0 rgba(16,185,129,0)']
-      : '0 18px 50px rgba(15,23,42,0.2)',
+      ? ['0 0 0 rgba(138,138,133,0)', '0 0 36px rgba(138,138,133,0.55)', '0 0 0 rgba(138,138,133,0)']
+      : '0 18px 50px rgba(138,138,133,0.2)',
   }), [scanning]);
 
   const selectMember = (member: Member) => {
@@ -83,6 +89,10 @@ export function AdminAttendance() {
   };
 
   const runBiometricScan = async () => {
+    if (!canVerify) {
+      addToast({ type: 'warning', title: 'You do not have verification permission.' });
+      return;
+    }
     if (!selectedMember) return;
     if (!onlineDevice) {
       addToast({ type: 'error', title: 'No biometric scanner is online' });
@@ -102,6 +112,11 @@ export function AdminAttendance() {
   };
 
   const handleAccessClaim = (item: AccessItemType) => {
+    const allowed = item === 'food' ? canClaimFood : item === 'souvenir' ? canClaimSouvenir : item === 'activity' ? canRecordActivity : canVerify;
+    if (!allowed) {
+      addToast({ type: 'warning', title: 'You do not have permission for this action.' });
+      return;
+    }
     if (!selectedMember) return;
     const result = claimAccessItem(selectedMember.id, item, actorEmail, actorName);
     addToast({ type: result.ok ? 'success' : 'warning', title: result.message });
@@ -112,33 +127,27 @@ export function AdminAttendance() {
   };
 
   return (
-    <AdminLayout>
-      <div className="mb-6 flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-        <div>
-          <motion.h2 className="font-display font-bold text-2xl text-slate-900 dark:text-white"
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            Biometric Operations Control
-          </motion.h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-3xl">
-            Scanner-ready architecture for USB or network fingerprint SDKs through a local WebSocket bridge.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 rounded-2xl px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500">
+    <AdminLayout
+      pageTitle="Biometric Operations Control"
+      pageSubtitle="Demo mode interface for USB or network fingerprint SDKs through a local WebSocket bridge."
+    >
+      <div className="mb-6 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-end">
+        <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-portal-line bg-portal-surface px-4 py-3 text-portal-ink">
           <Radio className="w-4 h-4 animate-pulse" />
-          <span className="text-sm font-medium">Realtime bridge channel active</span>
+          <span className="truncate text-sm font-medium">Demo mode: no scanner connected</span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      <div className="mb-6 grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
           { label: 'Pending Verification', value: pendingMembers.length, icon: Fingerprint, tone: 'text-amber-500 bg-amber-500/10' },
-          { label: 'Biometric Verified', value: verifiedMembers.length, icon: ShieldCheck, tone: 'text-emerald-500 bg-emerald-500/10' },
+          { label: 'Biometric Verified', value: verifiedMembers.length, icon: ShieldCheck, tone: 'text-portal-ink bg-portal-surface' },
           { label: 'Duplicate Alerts', value: duplicates.length, icon: AlertTriangle, tone: 'text-red-500 bg-red-500/10' },
-          { label: 'Online Devices', value: biometricDevices.filter(device => device.status === 'online').length, icon: Cpu, tone: 'text-blue-500 bg-blue-500/10' },
+          { label: 'Demo Devices', value: biometricDevices.length, icon: Cpu, tone: 'text-portal-ink bg-portal-surface' },
         ].map((item, index) => (
           <motion.div
             key={item.label}
-            className="rounded-[20px] p-5 backdrop-blur-glass border bg-white/70 dark:bg-slate-900/65 border-white/45 dark:border-white/[0.08]"
+            className="rounded-[20px] p-5 backdrop-blur-glass border bg-white/70 dark:bg-portal-surface border-white/45 dark:border-white/[0.08]"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.06 }}
@@ -146,49 +155,46 @@ export function AdminAttendance() {
             <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${item.tone}`}>
               <item.icon className="w-5 h-5" />
             </div>
-            <p className="font-mono text-3xl font-bold text-slate-900 dark:text-white mt-4">{item.value}</p>
-            <p className="text-xs text-slate-500 mt-1">{item.label}</p>
+            <p className="font-mono text-3xl font-bold text-portal-ink dark:text-white mt-4">{item.value}</p>
+            <p className="text-xs text-portal-label mt-1">{item.label}</p>
           </motion.div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-6">
+      <div className="grid min-w-0 grid-cols-1 gap-6 2xl:grid-cols-[1.25fr_0.75fr]">
         <motion.div
-          className="rounded-[24px] p-6 backdrop-blur-glass border bg-white/75 dark:bg-slate-900/70 border-white/45 dark:border-white/[0.08]"
+          className="portal-card min-w-0 p-4 sm:p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="flex items-center justify-between gap-4 mb-5">
+          <div className="mb-5 flex min-w-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <h3 className="font-display font-semibold text-lg text-slate-900 dark:text-white">Member Lookup</h3>
-              <p className="text-xs text-slate-500 mt-1">Search by name, member ID, QR code, or phone.</p>
+              <h3 className="font-display font-semibold text-lg text-portal-ink dark:text-white">Member Lookup</h3>
+              <p className="text-xs text-portal-label mt-1">Search by name, member ID, QR code, or phone.</p>
             </div>
-            <span className={`${onlineDevice ? 'status-badge-green' : 'status-badge-red'} shrink-0`}>
-              <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
-              {onlineDevice ? 'Scanner Online' : 'Scanner Offline'}
-            </span>
+            <span className="shrink-0 rounded-full border border-portal-line px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.04em] text-portal-label">Demo scanner</span>
           </div>
 
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-portal-label" />
+            <PortalInput
               value={search}
               onChange={e => {
                 setSearch(e.target.value);
                 if (e.target.value.length < 2) setSelectedMember(null);
               }}
               placeholder="Search member, scan QR code, or enter member ID..."
-              className="glass-input-lg w-full pl-12"
+              className="pl-12"
             />
             {search.length > 1 && !selectedMember && (
-              <div className="absolute top-full left-0 right-0 z-20 mt-2 rounded-2xl border bg-white dark:bg-slate-800 border-slate-200 dark:border-white/10 shadow-xl overflow-hidden">
+              <div className="absolute top-full left-0 right-0 z-20 mt-2 rounded-2xl border bg-white dark:bg-portal-surface border-portal-line dark:border-white/10 shadow-xl overflow-hidden">
                 {searchResults.length === 0 ? (
-                  <p className="p-4 text-sm text-slate-500 text-center">No member found</p>
+                  <p className="p-4 text-sm text-portal-label text-center">No member found</p>
                 ) : searchResults.map(member => (
-                  <button key={member.id} onClick={() => selectMember(member)} className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-slate-50 dark:hover:bg-white/5">
+                  <button key={member.id} onClick={() => selectMember(member)} className="w-full p-4 flex items-center justify-between gap-3 text-left hover:bg-portal-surface dark:hover:bg-white/5">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{member.fullName}</p>
-                      <p className="text-xs text-slate-500 font-mono">{member.id} - {member.conventionGroup}</p>
+                      <p className="text-sm font-semibold text-portal-ink dark:text-white">{member.fullName}</p>
+                      <p className="text-xs text-portal-label font-mono">{member.id} - {member.conventionGroup}</p>
                     </div>
                     <span className={`${statusMeta(member.biometricStatus).badge} text-[10px]`}>{statusMeta(member.biometricStatus).label}</span>
                   </button>
@@ -201,36 +207,36 @@ export function AdminAttendance() {
             {selectedMember ? (
               <motion.div
                 key={selectedMember.id}
-                className="mt-6 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6"
+                className="mt-6 grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
               >
-                <div className="rounded-[22px] p-6 bg-slate-950 text-white overflow-hidden relative">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.28),transparent_40%)]" />
+                <div className="rounded-[22px] p-6 bg-portal-dark text-white overflow-hidden relative">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(138,138,133,0.28),transparent_40%)]" />
                   <div className="relative z-10 text-center">
                     <motion.div
-                      className="w-32 h-32 rounded-full mx-auto bg-emerald-500/10 border border-emerald-400/30 flex items-center justify-center"
+                      className="w-32 h-32 rounded-full mx-auto bg-portal-surface border border-portal-line flex items-center justify-center"
                       animate={scannerPulse}
                       transition={{ duration: 1.2, repeat: scanning ? Infinity : 0 }}
                     >
-                      <Fingerprint className={`w-16 h-16 ${scanning ? 'text-emerald-300 animate-pulse' : 'text-emerald-400'}`} />
+                      <Fingerprint className={`w-16 h-16 ${scanning ? 'text-portal-ink animate-pulse' : 'text-portal-ink'}`} />
                     </motion.div>
-                    <p className="mt-5 text-sm text-emerald-100">{scanning ? 'Capturing fingerprint template...' : 'Ready for fingerprint capture'}</p>
+                    <p className="mt-5 text-sm text-portal-ink">{scanning ? 'Capturing fingerprint template...' : 'Ready for fingerprint capture'}</p>
                     <p className="text-xs text-white/45 mt-2">{onlineDevice?.name ?? 'No scanner connected'}</p>
                   </div>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div>
-                      <h3 className="font-display font-bold text-xl text-slate-900 dark:text-white">{selectedMember.fullName}</h3>
-                      <p className="font-mono text-sm text-purple-accent mt-1">{selectedMember.id}</p>
+                      <h3 className="font-display font-bold text-xl text-portal-ink dark:text-white">{selectedMember.fullName}</h3>
+                      <p className="font-mono text-sm text-portal-ink mt-1">{selectedMember.id}</p>
                     </div>
                     <span className={`${statusMeta(selectedMember.biometricStatus).badge}`}>{statusMeta(selectedMember.biometricStatus).label}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 mt-5">
+                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {[
                       { label: 'Fellowship Band', value: selectedMember.fellowshipBand },
                       { label: 'Department(s)', value: selectedMember.departments.join(', ') },
@@ -238,16 +244,16 @@ export function AdminAttendance() {
                       { label: 'Registered', value: new Date(selectedMember.registeredAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) },
                     ].map(item => (
                       <div key={item.label}>
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400">{item.label}</p>
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mt-1">{item.value}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-portal-label">{item.label}</p>
+                        <p className="text-sm font-medium text-portal-ink dark:text-portal-label mt-1">{item.value}</p>
                       </div>
                     ))}
                   </div>
 
                   <button
                     onClick={runBiometricScan}
-                    disabled={scanning}
-                    className="w-full mt-6 h-13 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-70"
+                    disabled={scanning || !canVerify}
+                    className="mt-6 flex h-13 w-full items-center justify-center gap-2 rounded-full bg-portal-dark text-white disabled:opacity-70"
                   >
                     {scanning ? <Activity className="w-5 h-5 animate-spin" /> : <Fingerprint className="w-5 h-5" />}
                     {scanning ? 'Scanning Fingerprint' : 'Capture and Verify Fingerprint'}
@@ -255,7 +261,7 @@ export function AdminAttendance() {
 
                   {scanResult && (
                     <motion.div
-                      className={`mt-4 p-4 rounded-2xl border ${scanResult === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}
+                      className={`mt-4 p-4 rounded-2xl border ${scanResult === 'success' ? 'bg-portal-surface border-portal-line text-portal-ink' : 'bg-red-500/10 border-red-500/20 text-red-500'}`}
                       initial={{ opacity: 0, scale: 0.96 }}
                       animate={{ opacity: 1, scale: 1 }}
                     >
@@ -267,7 +273,7 @@ export function AdminAttendance() {
                   )}
 
                   <div className="mt-6">
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-3">Access Control</h4>
+                    <h4 className="text-sm font-semibold text-portal-ink dark:text-white mb-3">Access Control</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {ACCESS_ITEMS.map(item => {
                         const claimed = Boolean(selectedMember.accessClaims?.[item.id]);
@@ -276,7 +282,8 @@ export function AdminAttendance() {
                           <button
                             key={item.id}
                             onClick={() => handleAccessClaim(item.id)}
-                            className={`p-3 rounded-2xl border text-left transition-colors ${claimed ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' : 'bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06]'}`}
+                            disabled={item.id === 'food' ? !canClaimFood : item.id === 'souvenir' ? !canClaimSouvenir : item.id === 'activity' ? !canRecordActivity : !canVerify}
+                            className={`p-3 rounded-2xl border text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${claimed ? 'bg-portal-surface border-portal-line text-portal-ink' : 'bg-portal-surface dark:bg-white/[0.03] border-portal-line dark:border-white/10 text-portal-ink dark:text-portal-label hover:bg-portal-surface dark:hover:bg-white/[0.06]'}`}
                           >
                             <Icon className="w-4 h-4 mb-2" />
                             <p className="text-sm font-medium">{claimed ? `${item.label} Claimed` : item.label}</p>
@@ -290,56 +297,56 @@ export function AdminAttendance() {
               </motion.div>
             ) : (
               <motion.div
-                className="mt-6 rounded-[22px] border border-dashed border-slate-300 dark:border-white/10 p-10 text-center"
+                className="mt-6 rounded-[22px] border border-dashed border-portal-line p-7 text-center"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                <Sparkles className="w-10 h-10 text-purple-accent mx-auto mb-3" />
-                <p className="text-sm text-slate-500">Search or scan a QR code to load member details instantly.</p>
+                <Sparkles className="w-10 h-10 text-portal-ink mx-auto mb-3" />
+                <p className="text-sm text-portal-label">Search or scan a QR code to load member details instantly.</p>
               </motion.div>
             )}
           </AnimatePresence>
         </motion.div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <motion.div
-            className="rounded-[20px] p-5 backdrop-blur-glass border bg-white/70 dark:bg-slate-900/65 border-white/45 dark:border-white/[0.08]"
+            className="portal-card p-5"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <h3 className="font-display font-semibold text-lg text-slate-900 dark:text-white mb-4">Device Status</h3>
+            <h3 className="font-display font-semibold text-lg text-portal-ink dark:text-white mb-4">Device Status</h3>
             <div className="space-y-3">
               {biometricDevices.map(device => (
-                <div key={device.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/[0.06]">
+                <div key={device.id} className="p-4 rounded-2xl bg-portal-surface dark:bg-white/[0.03] border border-portal-line dark:border-white/[0.06]">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">{device.name}</p>
-                      <p className="text-xs text-slate-500 mt-1">{device.vendor} - {device.connectionType}</p>
+                      <p className="text-sm font-semibold text-portal-ink dark:text-white">{device.name}</p>
+                      <p className="text-xs text-portal-label mt-1">{device.vendor} - {device.connectionType}</p>
                     </div>
-                    <span className={`${device.status === 'online' ? 'status-badge-green' : device.status === 'connecting' ? 'status-badge-amber' : 'status-badge-red'} text-[10px]`}>{device.status}</span>
+                    <span className="rounded-full border border-portal-line px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.04em] text-portal-label">Demo</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-3">Heartbeat {new Date(device.lastHeartbeat).toLocaleTimeString()}</p>
+                  <p className="text-[11px] text-portal-label mt-3">Simulated device activity</p>
                 </div>
               ))}
             </div>
           </motion.div>
 
           <motion.div
-            className="rounded-[20px] p-5 backdrop-blur-glass border bg-white/70 dark:bg-slate-900/65 border-white/45 dark:border-white/[0.08]"
+            className="portal-card p-5"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <h3 className="font-display font-semibold text-lg text-slate-900 dark:text-white mb-4">Live Verification Feed</h3>
+            <h3 className="font-display font-semibold text-lg text-portal-ink dark:text-white mb-4">Demo Verification Feed</h3>
             <div className="space-y-3 max-h-[320px] overflow-y-auto scrollbar-thin">
               {(biometricLogs.length ? biometricLogs : [
                 { id: 'empty', status: 'failed' as const, message: 'Waiting for scanner activity', createdAt: new Date().toISOString(), scannerId: 'bio-bridge-01' },
               ]).slice(0, 10).map(log => (
                 <div key={log.id} className="flex items-start gap-3">
-                  <span className={`w-2.5 h-2.5 rounded-full mt-1.5 ${log.status === 'success' ? 'bg-emerald-500' : log.status === 'duplicate' ? 'bg-red-500' : 'bg-amber-500'} animate-pulse`} />
+                  <span className={`w-2.5 h-2.5 rounded-full mt-1.5 ${log.status === 'success' ? 'bg-portal-dark' : log.status === 'duplicate' ? 'bg-red-500' : 'bg-amber-500'} animate-pulse`} />
                   <div className="min-w-0">
-                    <p className="text-sm text-slate-700 dark:text-slate-200">{log.memberName ?? log.message}</p>
-                    <p className="text-xs text-slate-400 mt-1">{log.message} - {new Date(log.createdAt).toLocaleTimeString()}</p>
+                    <p className="text-sm text-portal-ink dark:text-portal-label">{log.memberName ?? log.message}</p>
+                    <p className="text-xs text-portal-label mt-1">{log.message} - {new Date(log.createdAt).toLocaleTimeString()}</p>
                   </div>
                 </div>
               ))}
@@ -347,20 +354,20 @@ export function AdminAttendance() {
           </motion.div>
 
           <motion.div
-            className="rounded-[20px] p-5 backdrop-blur-glass border bg-white/70 dark:bg-slate-900/65 border-white/45 dark:border-white/[0.08]"
+            className="portal-card p-5"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <h3 className="font-display font-semibold text-lg text-slate-900 dark:text-white mb-4">Recently Verified</h3>
+            <h3 className="font-display font-semibold text-lg text-portal-ink dark:text-white mb-4">Recently Verified</h3>
             <div className="space-y-3">
               {recentVerified.map(record => (
                 <div key={record.id} className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-white">{record.memberName}</p>
-                    <p className="text-xs font-mono text-slate-400">{record.memberId}</p>
+                    <p className="text-sm font-medium text-portal-ink dark:text-white">{record.memberName}</p>
+                    <p className="text-xs font-mono text-portal-label">{record.memberId}</p>
                   </div>
-                  <span className="text-xs text-emerald-500">{new Date(record.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-xs text-portal-ink">{new Date(record.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               ))}
             </div>

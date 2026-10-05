@@ -10,8 +10,60 @@ export type ScannerStatus = 'online' | 'offline' | 'connecting' | 'error';
 export type AccessItemType = 'food' | 'souvenir' | 'entry' | 'activity';
 export type AdminActionType = 'attendance' | 'registration' | 'verification' | 'access' | 'role';
 
-export interface Member {
+export interface RecordMetadata {
+  eventId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+}
+
+export interface ConventionEvent extends RecordMetadata {
   id: string;
+  eventId?: string;
+  name: string;
+  theme: string;
+  scripture?: string;
+  startDate: string;
+  endDate: string;
+  venue: string;
+  description?: string;
+  maxAttendees: number;
+  active: boolean;
+}
+
+export interface ManagedListItem extends RecordMetadata {
+  id: string;
+  name: string;
+  active: boolean;
+  sortOrder: number;
+}
+export type Band = ManagedListItem;
+export type DepartmentItem = ManagedListItem;
+export type ChurchGroup = ManagedListItem;
+export type ChurchLocation = ManagedListItem;
+export interface Programme extends RecordMetadata {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  active: boolean;
+  sortOrder: number;
+}
+export type ConventionRoleName = 'registration_desk' | 'verification_operator' | 'food_distributor' | 'souvenir_distributor' | 'activity_coordinator' | 'viewer';
+export interface ConventionRole extends RecordMetadata {
+  id: string;
+  userEmail: string;
+  role: ConventionRoleName;
+  assignedBy: string;
+  assignedAt: string;
+}
+
+export interface Member extends RecordMetadata {
+  id: string;
+  statusToken?: string;
   fullName: string;
   phoneNumber: string;
   email: string;
@@ -35,8 +87,9 @@ export interface Member {
   accessClaims?: Partial<Record<AccessItemType, string>>;
 }
 
-export interface Executive {
+export interface Executive extends RecordMetadata {
   id: string;
+  statusToken?: string;
   fullName: string;
   leadershipRole: string;
   department: Department;
@@ -49,10 +102,11 @@ export interface Executive {
   registrationStatus?: 'executive' | 'admin';
   adminGrantedAt?: string;
   adminRevokedAt?: string;
+  accessClaims?: Partial<Record<AccessItemType, string>>;
   lastLogin?: string;
 }
 
-export interface AttendanceRecord {
+export interface AttendanceRecord extends RecordMetadata {
   id: string;
   memberId: string;
   memberName: string;
@@ -62,7 +116,7 @@ export interface AttendanceRecord {
   sessionName: string;
 }
 
-export interface BiometricLog {
+export interface BiometricLog extends RecordMetadata {
   id: string;
   memberId?: string;
   memberName?: string;
@@ -72,7 +126,7 @@ export interface BiometricLog {
   createdAt: string;
 }
 
-export interface BiometricDevice {
+export interface BiometricDevice extends RecordMetadata {
   id: string;
   name: string;
   vendor: 'Digital Persona' | 'SecuGen' | 'ZKTeco' | 'Suprema' | 'Nitgen' | 'SDK Bridge';
@@ -81,7 +135,7 @@ export interface BiometricDevice {
   lastHeartbeat: string;
 }
 
-export interface AdminActivityLog {
+export interface AdminActivityLog extends RecordMetadata {
   id: string;
   actorEmail: string;
   actorName: string;
@@ -90,7 +144,7 @@ export interface AdminActivityLog {
   createdAt: string;
 }
 
-export interface FirstTimer {
+export interface FirstTimer extends RecordMetadata {
   id: string;
   fullName: string;
   phoneNumber: string;
@@ -101,7 +155,7 @@ export interface FirstTimer {
   followedUp: boolean;
 }
 
-export interface ConventionSession {
+export interface ConventionSession extends RecordMetadata {
   id: string;
   name: string;
   date: string;
@@ -110,18 +164,20 @@ export interface ConventionSession {
   venue: string;
 }
 
-export interface ConventionSettings {
+export interface ConventionSettings extends RecordMetadata {
+  id?: string;
   name: string;
   startDate: string;
   endDate: string;
   location: string;
   theme: string;
+  scripture?: string;
   isActive: boolean;
   maxAttendees: number;
   sessions: ConventionSession[];
 }
 
-export interface GeneratedLink {
+export interface GeneratedLink extends RecordMetadata {
   id: string;
   type: 'member' | 'executive';
   url: string;
@@ -167,15 +223,6 @@ export const GROUP_COLORS: Record<ConventionGroup, string> = {
   'Group E': '#94A3B8',
 };
 
-export const DEPARTMENT_LIST: Department[] = [
-  'Choir', 'Ushering', 'Media', 'Protocol', 'Drama', 'Prayer',
-  'Technical', 'Dance', 'Evangelism', 'Welfare', 'Decoration',
-  'Security', 'Sanitation', 'None',
-];
-
-export const BAND_LIST: FellowshipBand[] = ['Peniel', 'Judah', 'Zion', 'Ephraim', 'None'];
-export const GROUP_LIST: ConventionGroup[] = ['Group A', 'Group B', 'Group C', 'Group D', 'Group E'];
-export const BRANCH_LIST = ['Main Branch', 'Satellite Branch 1', 'Satellite Branch 2', 'Online Fellowship'];
 export const EXECUTIVE_ROLES = [
   'President', 'Vice President', 'Secretary', 'Assistant Secretary',
   'Financial Secretary', 'Prayer Coordinator', 'Choir Director',

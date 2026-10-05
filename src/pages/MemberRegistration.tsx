@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   BadgeCheck,
@@ -12,14 +13,16 @@ import {
   UserRound,
   UsersRound,
 } from 'lucide-react';
+import { AuthHeader } from '@/components/auth/AuthExperience';
 import youthLogo from '@/assets/youth-logo.png';
 import { ConventionTag } from '@/components/ConventionTag';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/contexts/ToastContext';
-import { BAND_COLORS, BAND_LIST, BRANCH_LIST, DEPARTMENT_LIST } from '@/types';
+import { sendRegistrationConfirmation } from '@/lib/registrationEmail';
+import { bandColors as BAND_COLORS } from '@/components/ui-kit/palette';
 import type { Department, FellowshipBand, Member } from '@/types';
 
-const steps = ['Identity', 'Church', 'First timer', 'Tag'];
+const steps = ['Personal Information', 'Church Information', 'Fellowship', 'Confirmation', 'Complete'];
 const GROUPS = ['Group A', 'Group B', 'Group C', 'Group D'];
 
 type FormState = {
@@ -48,7 +51,7 @@ const initialForm: FormState = {
   address: '',
   occupation: '',
   emergencyContact: '',
-  churchBranch: BRANCH_LIST[0],
+  churchBranch: '',
   profilePhoto: '',
   fellowshipBand: '',
   departments: [],
@@ -137,7 +140,7 @@ function setFittedFont(context: CanvasRenderingContext2D, weight: number, size: 
   } while (nextSize >= minSize);
 }
 
-async function createTagImage(member: Member, _qrSvg: SVGSVGElement | null) {
+async function createTagImage(member: Member) {
   const canvas = document.createElement('canvas');
   canvas.width = 1184;
   canvas.height = 2008;
@@ -323,44 +326,13 @@ async function createTagImage(member: Member, _qrSvg: SVGSVGElement | null) {
   return canvas.toDataURL('image/png');
 }
 
-async function sendRegistrationConfirmation(member: Member, tagImageUrl: string) {
-  const endpoint = import.meta.env.VITE_CONFIRMATION_EMAIL_ENDPOINT as string | undefined;
-
-  if (!endpoint) {
-    throw new Error('Set VITE_CONFIRMATION_EMAIL_ENDPOINT to send confirmation emails with tag attachments.');
-  }
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      to: member.email,
-      subject: `MOSYF 2026 registration confirmation - ${member.id}`,
-      member: {
-        id: member.id,
-        fullName: member.fullName,
-        email: member.email,
-        fellowshipBand: member.fellowshipBand,
-        conventionGroup: member.conventionGroup,
-        departments: member.departments,
-        registeredAt: member.registeredAt,
-      },
-      attachment: {
-        filename: `${member.id}-convention-tag.png`,
-        contentType: 'image/png',
-        dataUrl: tagImageUrl,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Confirmation email failed with status ${response.status}.`);
-  }
-}
-
 export function MemberRegistration() {
-  const { addMember, members } = useAppData();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { addMember, members, bands, departments, churchLocations, validateGeneratedLink, recordGeneratedLinkUse, getStatusUrl } = useAppData();
   const { addToast } = useToast();
+  const token = new URLSearchParams(location.search).get('token');
+  const registrationLink = validateGeneratedLink('member', token);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -465,6 +437,11 @@ export function MemberRegistration() {
   const previous = () => setStep(current => Math.max(current - 1, 0));
 
   const submit = async () => {
+    if (!registrationLink) {
+      addToast({ type: 'error', title: 'Invalid registration link', description: "This registration link isn't valid." });
+      return;
+    }
+
     if (!validateStep()) return;
     setSubmitting(true);
 
@@ -487,6 +464,7 @@ export function MemberRegistration() {
       });
 
       setRegisteredMember(member);
+      recordGeneratedLinkUse(registrationLink.id);
       setEmailingMemberId(member.id);
       setStep(3);
       addToast({ type: 'success', title: 'Registration complete', description: `${member.id} has been generated. Preparing confirmation email...` });
@@ -504,8 +482,7 @@ export function MemberRegistration() {
     if (!tagRef.current || !registeredMember) return;
 
     try {
-      const qrSvg = tagRef.current.querySelector('svg');
-      const imageUrl = await createTagImage(registeredMember, qrSvg);
+      const imageUrl = await createTagImage(registeredMember);
       const anchor = document.createElement('a');
       anchor.href = imageUrl;
       anchor.download = `${registeredMember.id}-convention-tag.png`;
@@ -527,11 +504,31 @@ export function MemberRegistration() {
     const sendEmail = async () => {
       try {
         await new Promise(resolve => window.requestAnimationFrame(resolve));
-        const qrSvg = tagRef.current?.querySelector('svg') ?? null;
-        const imageUrl = await createTagImage(registeredMember, qrSvg);
+        const imageUrl = await createTagImage(registeredMember);
         if (cancelled) return;
 
-        await sendRegistrationConfirmation(registeredMember, imageUrl);
+        await sendRegistrationConfirmation({
+          type: 'member',
+          to: registeredMember.email,
+          subject: 'Your MOSYF Convention Registration is Confirmed',
+          statusUrl: getStatusUrl(registeredMember),
+          tagUrl: getStatusUrl(registeredMember),
+          member: {
+            id: registeredMember.id,
+            fullName: registeredMember.fullName,
+            email: registeredMember.email,
+            phoneNumber: registeredMember.phoneNumber,
+            fellowshipBand: registeredMember.fellowshipBand,
+            conventionGroup: registeredMember.conventionGroup,
+            departments: registeredMember.departments,
+            registeredAt: registeredMember.registeredAt,
+          },
+          attachment: {
+            filename: `${registeredMember.id}-convention-tag.png`,
+            contentType: 'image/png',
+            dataUrl: imageUrl,
+          },
+        });
         if (!cancelled) {
           setEmailingMemberId('');
           addToast({
@@ -565,44 +562,71 @@ export function MemberRegistration() {
   const inputClass = (field: keyof FormState) =>
     `glass-input w-full ${errors[field] ? 'border-red-500 ring-[3px] ring-red-500/15' : ''}`;
 
+  if (!registrationLink) {
+    return (
+      <main className="min-h-screen portal-theme portal-canvas">
+        <AuthHeader eyebrow="Member Onboarding" homeHref="/convention/status" hireDeveloperHref="/convention/hire" />
+        <section className="flex min-h-screen items-center justify-center px-5 py-24">
+          <motion.div
+            className="w-full max-w-md rounded-[28px] border border-portal-line bg-white/75 p-8 text-center shadow-[0_24px_80px_rgba(138,138,133,0.10)] backdrop-blur-2xl dark:border-white/10 dark:bg-white/[0.06]"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-red-500/10 text-red-500">
+              <ShieldCheck className="h-7 w-7" />
+            </div>
+            <h1 className="text-2xl font-black">Admin Link Required</h1>
+            <p className="mt-3 text-sm leading-6 text-portal-label dark:text-white/55">This registration link isn't valid or has expired. Please request a fresh member invitation from an admin.</p>
+            <button onClick={() => navigate('/convention/status')} className="mt-7 rounded-2xl bg-portal-dark px-5 py-3 text-sm font-bold text-white transition hover:-translate-y-0.5 dark:bg-portal-dark dark:text-white">
+              Convention Status
+            </button>
+          </motion.div>
+        </section>
+      </main>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-[#eef4f8] text-slate-950">
-      <section className="no-print min-h-screen px-4 py-6 sm:px-6 lg:px-8">
+    <main className="min-h-screen portal-theme portal-canvas">
+      <AuthHeader eyebrow="Member Onboarding" homeHref="/convention/status" hireDeveloperHref={registeredMember?.statusToken ? `/convention/status/${registeredMember.statusToken}/hire` : '/convention/hire'} />
+      <section className="no-print min-h-screen px-4 py-24 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[360px_1fr]">
-          <aside className="rounded-2xl bg-[#083f63] p-6 text-white shadow-xl shadow-slate-900/15">
+          <aside className="relative overflow-hidden rounded-[30px] border border-white/10 bg-portal-dark p-5 text-white shadow-surface sm:p-6">
+            <div className="absolute inset-0 bg-portal-dark" />
+            <div className="absolute inset-0 opacity-[0.16] [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:42px_42px]" />
+            <div className="relative z-10">
             <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-white text-[#083f63]">
-                <BadgeCheck className="h-7 w-7" />
-              </div>
+              <img src={youthLogo} alt="MOSYF logo" className="h-12 w-12 rounded-xl bg-white object-contain p-1" />
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">MOSYF 2026</p>
-                <h1 className="text-2xl font-black leading-tight">Member Registration</h1>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">MOSYF 2026</p>
+                <h1 className="text-2xl font-black leading-tight">Member Onboarding</h1>
               </div>
             </div>
 
-            <div className="mt-8 space-y-4">
-              {steps.map((label, index) => (
-                <div key={label} className="flex items-center gap-3">
-                  <div className={`grid h-9 w-9 place-items-center rounded-full border ${index <= step ? 'border-white bg-white text-[#083f63]' : 'border-white/20 text-white/50'}`}>
+            <div className="mt-6 flex gap-2 overflow-x-auto pb-1 lg:mt-8 lg:block lg:space-y-4 lg:overflow-visible">
+              {steps.slice(0, 4).map((label, index) => (
+                <div key={label} className="flex shrink-0 items-center gap-3">
+                  <div className={`grid h-9 w-9 place-items-center rounded-full border ${index <= step ? 'border-white bg-white text-portal-accent-ink' : 'border-white/20 text-white/45'}`}>
                     {index < step ? <Check className="h-4 w-4" /> : index + 1}
                   </div>
-                  <span className={index <= step ? 'font-semibold text-white' : 'text-white/55'}>{label}</span>
+                  <span className={`text-sm ${index <= step ? 'font-semibold text-white' : 'text-white/50'} lg:block`}>{label}</span>
                 </div>
               ))}
             </div>
 
-            <div className="mt-10 rounded-xl border border-white/15 bg-white/10 p-4">
-              <p className="text-sm text-white/75">Member IDs are generated as searchable QR-linked records for biometric check-in and convention attendance.</p>
+            <div className="mt-6 rounded-2xl border border-white/12 bg-white/[0.07] p-4 lg:mt-10">
+              <p className="text-sm text-white/70">Member IDs are generated as searchable QR-linked records for biometric check-in and convention attendance.</p>
               <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
                 {GROUPS.map(group => (
                   <span key={group} className="rounded-lg bg-white/10 px-3 py-2">{group}</span>
                 ))}
-                <span className="rounded-lg bg-white px-3 py-2 font-semibold text-[#083f63]">Group E for None</span>
+                <span className="rounded-lg bg-white px-3 py-2 font-semibold text-portal-accent-ink">Group E for None</span>
               </div>
+            </div>
             </div>
           </aside>
 
-          <div className="rounded-2xl border border-white bg-white/80 p-4 shadow-xl shadow-slate-900/10 backdrop-blur sm:p-6 lg:p-8">
+          <div className="portal-card rounded-[30px] p-4 sm:p-6 lg:p-8">
             <AnimatePresence mode="wait">
               {step === 0 && (
                 <motion.div key="identity" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }}>
@@ -610,12 +634,12 @@ export function MemberRegistration() {
 
                   <div className="grid gap-5 lg:grid-cols-[240px_1fr]">
                     <div>
-                      <label className={`flex aspect-[3/4] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed bg-slate-50 text-center transition ${errors.profilePhoto ? 'border-red-400' : 'border-slate-300 hover:border-[#083f63]'}`}>
+                      <label className={`flex aspect-[3/4] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[24px] border-2 border-dashed bg-portal-from text-center transition ${errors.profilePhoto ? 'border-red-400' : 'border-portal-line hover:border-portal-accent'}`}>
                         {form.profilePhoto ? (
                           <img src={form.profilePhoto} alt="Uploaded member" className="h-full w-full object-cover" />
                         ) : (
-                          <span className="flex flex-col items-center px-6 text-sm text-slate-500">
-                            <Camera className="mb-3 h-10 w-10 text-[#083f63]" />
+                          <span className="flex flex-col items-center px-6 text-sm text-portal-label">
+                            <Camera className="mb-3 h-10 w-10 text-portal-ink" />
                             Upload a clear photo
                           </span>
                         )}
@@ -664,13 +688,13 @@ export function MemberRegistration() {
 
                   <Field label="Which fellowship band do you belong to?" error={errors.fellowshipBand}>
                     <div className="grid gap-3 sm:grid-cols-5">
-                      {BAND_LIST.map(band => (
+                      {[...bands.filter(band => band.active).map(band => band.name), 'None'].map(band => (
                         <GlassChoice
                           key={band}
                           label={band}
                           selected={form.fellowshipBand === band}
                           color={BAND_COLORS[band]}
-                          onClick={() => update('fellowshipBand', band)}
+                          onClick={() => update('fellowshipBand', band as FellowshipBand)}
                         />
                       ))}
                     </div>
@@ -679,7 +703,8 @@ export function MemberRegistration() {
                   <div className="mt-6">
                     <Field label="Church Branch" error={errors.churchBranch}>
                       <select className={inputClass('churchBranch')} value={form.churchBranch} onChange={event => update('churchBranch', event.target.value)}>
-                        {BRANCH_LIST.map(branch => <option key={branch}>{branch}</option>)}
+                        <option value="">Select a church location</option>
+                        {churchLocations.filter(location => location.active).map(location => <option key={location.id} value={location.name}>{location.name}</option>)}
                       </select>
                     </Field>
                   </div>
@@ -687,13 +712,13 @@ export function MemberRegistration() {
                   <div className="mt-6">
                     <Field label="Which department(s) do you serve in?" error={errors.departments}>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {DEPARTMENT_LIST.map(department => (
+                        {[...departments.filter(department => department.active).map(department => department.name), 'None'].map(department => (
                           <GlassChoice
                             key={department}
                             label={department}
-                            selected={form.departments.includes(department)}
-                            color={department === 'None' ? '#64748b' : '#0f766e'}
-                            onClick={() => toggleDepartment(department)}
+                            selected={form.departments.includes(department as Department)}
+                          color={department === 'None' ? 'var(--muted)' : 'var(--accent)'}
+                            onClick={() => toggleDepartment(department as Department)}
                           />
                         ))}
                       </div>
@@ -736,8 +761,8 @@ export function MemberRegistration() {
                       <div className="grid gap-6 xl:grid-cols-[minmax(360px,520px)_1fr]">
                         <ConventionTag member={registeredMember} refProp={tagRef} />
                         <div className="space-y-4">
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                            <h3 className="font-bold text-slate-950">Convention tag details</h3>
+                          <div className="rounded-2xl border border-portal-line bg-portal-surface p-5">
+                            <h3 className="font-bold text-portal-ink">Convention tag details</h3>
                             <div className="mt-4 grid gap-3 text-sm">
                               {[
                                 ['Name', registeredMember.fullName],
@@ -747,9 +772,9 @@ export function MemberRegistration() {
                                 ['Departments', registeredMember.departments.join(', ')],
                                 ['Registration date', formatRegistrationDate(registeredMember.registeredAt)],
                               ].map(([label, value]) => (
-                                <div key={label} className="grid gap-1 rounded-xl bg-white p-3 sm:grid-cols-[150px_1fr]">
-                                  <span className="text-xs font-semibold uppercase text-slate-500">{label}</span>
-                                  <span className="font-medium text-slate-900">{value || '-'}</span>
+                                <div key={label} className="grid gap-1 rounded-xl bg-portal-surface p-3 sm:grid-cols-[150px_1fr]">
+                                  <span className="text-xs font-semibold uppercase text-portal-label">{label}</span>
+                                  <span className="font-medium text-portal-ink">{value || '-'}</span>
                                 </div>
                               ))}
                             </div>
@@ -759,7 +784,7 @@ export function MemberRegistration() {
                             <button onClick={downloadTag} className="gradient-btn flex items-center justify-center gap-2">
                               <Download className="h-4 w-4" /> Download PNG
                             </button>
-                            <button onClick={printTag} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50">
+                            <button onClick={printTag} className="flex items-center justify-center gap-2 rounded-2xl border border-portal-line bg-portal-surface px-6 py-3 text-sm font-semibold text-portal-ink transition hover:bg-portal-surface">
                               <Printer className="h-4 w-4" /> Print / Save PDF
                             </button>
                           </div>
@@ -779,16 +804,16 @@ export function MemberRegistration() {
             </AnimatePresence>
 
             {step < 3 && (
-              <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-5">
-                <button onClick={previous} className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 ${step === 0 ? 'invisible' : ''}`}>
+              <div className="mt-8 flex items-center justify-between border-t border-portal-line pt-5">
+                <button onClick={previous} className={`flex min-h-11 items-center gap-2 rounded-full border border-portal-line px-4 py-2 text-sm font-semibold text-portal-ink transition hover:bg-portal-surface ${step === 0 ? 'invisible' : ''}`}>
                   <ChevronLeft className="h-4 w-4" /> Back
                 </button>
                 {step < 2 ? (
-                  <button onClick={next} className="gradient-btn flex items-center gap-2">
+                  <button onClick={next} className="flex min-h-11 items-center gap-2 rounded-full bg-portal-dark px-5 py-2 text-sm font-semibold text-white">
                     Continue <ChevronRight className="h-4 w-4" />
                   </button>
                 ) : (
-                  <button onClick={submit} disabled={submitting} className="gradient-btn-green flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-70">
+                  <button onClick={submit} disabled={submitting} className="flex min-h-11 items-center gap-2 rounded-full bg-portal-dark px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70">
                     {submitting ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : <Check className="h-4 w-4" />}
                     Complete Registration
                   </button>
@@ -811,12 +836,12 @@ export function MemberRegistration() {
 function Header({ icon: Icon, title, subtitle }: { icon: typeof UserRound; title: string; subtitle: string }) {
   return (
     <div className="mb-6 flex items-start gap-4">
-      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#f04b23] text-white">
+      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-portal-accent text-portal-accent-ink">
         <Icon className="h-6 w-6" />
       </div>
       <div>
-        <h2 className="text-2xl font-black text-slate-950">{title}</h2>
-        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        <h2 className="text-2xl font-black text-portal-ink">{title}</h2>
+        <p className="mt-1 text-sm text-portal-label">{subtitle}</p>
       </div>
     </div>
   );
@@ -825,7 +850,7 @@ function Header({ icon: Icon, title, subtitle }: { icon: typeof UserRound; title
 function Field({ label, error, className = '', children }: { label: string; error?: string; className?: string; children: React.ReactNode }) {
   return (
     <label className={`block ${className}`}>
-      <span className="mb-2 block text-sm font-bold text-slate-700">{label}</span>
+      <span className="mb-2 block text-sm font-bold text-portal-ink">{label}</span>
       {children}
       {error && <ErrorText>{error}</ErrorText>}
     </label>
@@ -838,7 +863,7 @@ function ErrorText({ children }: { children: React.ReactNode }) {
 
 function SelectPill({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className={`h-12 rounded-xl border text-sm font-bold transition ${selected ? 'border-[#083f63] bg-[#083f63] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-[#083f63]'}`}>
+    <button type="button" onClick={onClick} className={`h-12 rounded-xl border text-sm font-bold transition ${selected ? 'border-portal-line bg-portal-dark text-white' : 'border-portal-line bg-portal-surface text-portal-label hover:border-portal-line'}`}>
       {children}
     </button>
   );
@@ -851,9 +876,9 @@ function GlassChoice({ label, selected, color, onClick }: { label: string; selec
       onClick={onClick}
       className="relative min-h-24 overflow-hidden rounded-2xl border p-4 text-left shadow-sm backdrop-blur transition"
       style={{
-        borderColor: selected ? color : 'rgba(148, 163, 184, 0.35)',
-        background: selected ? `linear-gradient(135deg, ${color}, ${color}cc)` : 'rgba(255,255,255,0.62)',
-        color: selected ? '#fff' : '#0f172a',
+        borderColor: selected ? color : 'var(--surface-line)',
+        background: selected ? 'var(--dark-card)' : 'var(--surface)',
+        color: selected ? 'white' : 'var(--ink)',
       }}
       whileHover={{ y: -4, scale: 1.01 }}
       whileTap={{ scale: 0.98 }}
@@ -862,7 +887,7 @@ function GlassChoice({ label, selected, color, onClick }: { label: string; selec
         {label}
         {selected && <Check className="h-4 w-4" />}
       </span>
-      <span className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-white/20" />
+      <span className="absolute -right-8 -top-8 h-20 w-20 rounded-full bg-portal-surface" />
       <span className="absolute bottom-3 left-4 h-1 w-12 rounded-full bg-current opacity-30" />
     </motion.button>
   );
@@ -873,7 +898,7 @@ function DecisionCard({ selected, title, description, onClick }: { selected: boo
     <motion.button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border p-5 text-left transition ${selected ? 'border-[#f04b23] bg-[#f04b23] text-white shadow-lg shadow-orange-500/20' : 'border-slate-200 bg-white text-slate-900 hover:border-[#f04b23]'}`}
+      className={`rounded-2xl border p-5 text-left transition ${selected ? 'border-portal-accent bg-portal-accent text-portal-accent-ink shadow-lg shadow-surface' : 'border-portal-line bg-portal-surface text-portal-ink hover:border-portal-accent'}`}
       whileHover={{ y: -3 }}
       whileTap={{ scale: 0.98 }}
     >
@@ -881,7 +906,7 @@ function DecisionCard({ selected, title, description, onClick }: { selected: boo
         {title}
         {selected && <Check className="h-5 w-5" />}
       </span>
-      <span className={selected ? 'mt-2 block text-sm text-white/80' : 'mt-2 block text-sm text-slate-500'}>{description}</span>
+      <span className={selected ? 'mt-2 block text-sm text-portal-accent-ink' : 'mt-2 block text-sm text-portal-label'}>{description}</span>
     </motion.button>
   );
 }

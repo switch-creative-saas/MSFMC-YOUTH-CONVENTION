@@ -5,6 +5,18 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        portal: {
+          from: 'var(--bg-from)',
+          to: 'var(--bg-to)',
+          surface: 'var(--surface)',
+          ink: 'var(--ink)',
+          muted: 'var(--muted)',
+          label: 'var(--label-ink)',
+          accent: 'var(--accent)',
+          'accent-ink': 'var(--accent-ink)',
+          dark: 'var(--dark-card)',
+          line: 'var(--surface-line)',
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -23,11 +35,11 @@ module.exports = {
           foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
+          DEFAULT: "hsl(var(--muted-surface))",
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
+          DEFAULT: "hsl(var(--accent-surface))",
           foreground: "hsl(var(--accent-foreground))",
         },
         popover: {
@@ -67,11 +79,14 @@ module.exports = {
         },
       },
       fontFamily: {
+        portal: ['Outfit', 'system-ui', 'sans-serif'],
         display: ['Poppins', 'system-ui', 'sans-serif'],
         body: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       borderRadius: {
+        panel: '30px',
+        shell: '40px',
         xl: "calc(var(--radius) + 4px)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
@@ -79,6 +94,8 @@ module.exports = {
         xs: "calc(var(--radius) - 6px)",
       },
       boxShadow: {
+        surface: 'var(--surface-shadow)',
+        shell: 'var(--shell-shadow)',
         xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
         glass: '0 8px 32px rgba(26, 58, 107, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25)',
         'glass-dark': '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06)',

@@ -23,7 +23,7 @@ export function MemberID() {
 
   return (
     <div className="max-w-md mx-auto">
-      <motion.h2 className="font-display font-bold text-2xl text-slate-900 dark:text-white mb-5"
+      <motion.h2 className="font-display font-bold text-2xl text-portal-ink dark:text-white mb-5"
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         My Digital ID
       </motion.h2>
@@ -44,14 +44,14 @@ export function MemberID() {
       <div className="flex gap-3 mt-5">
         <motion.button
           onClick={handleDownload}
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-portal-line dark:border-white/10 text-sm font-medium text-portal-ink dark:text-portal-label hover:bg-portal-surface dark:hover:bg-white/5 transition-colors"
           whileTap={{ scale: 0.97 }}
         >
           <Download className="w-4 h-4" /> Download
         </motion.button>
         <motion.button
           onClick={handlePrint}
-          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-portal-line dark:border-white/10 text-sm font-medium text-portal-ink dark:text-portal-label hover:bg-portal-surface dark:hover:bg-white/5 transition-colors"
           whileTap={{ scale: 0.97 }}
         >
           <Printer className="w-4 h-4" /> Print Badge

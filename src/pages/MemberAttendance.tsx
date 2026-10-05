@@ -38,7 +38,7 @@ export function MemberAttendance() {
 
   return (
     <div className="max-w-md mx-auto space-y-5">
-      <motion.h2 className="font-display font-bold text-2xl text-slate-900 dark:text-white"
+      <motion.h2 className="font-display font-bold text-2xl text-portal-ink dark:text-white"
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         My Attendance
       </motion.h2>
@@ -47,8 +47,8 @@ export function MemberAttendance() {
       <motion.button
         className={`w-full rounded-[20px] p-6 flex flex-col items-center justify-center gap-3 transition-all ${
           isAlreadyCheckedIn || checkedIn
-            ? 'bg-slate-100 dark:bg-white/5 cursor-not-allowed'
-            : 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg hover:shadow-xl'
+            ? 'bg-portal-surface dark:bg-white/5 cursor-not-allowed'
+            : 'bg-portal-dark shadow-lg hover:shadow-xl'
         }`}
         onClick={handleCheckIn}
         disabled={scanning || isAlreadyCheckedIn || checkedIn}
@@ -64,9 +64,9 @@ export function MemberAttendance() {
           </>
         ) : isAlreadyCheckedIn || checkedIn ? (
           <>
-            <CheckCircle className="w-12 h-12 text-emerald-500" />
-            <p className="font-display font-bold text-xl text-slate-900 dark:text-white">Checked In</p>
-            <p className="text-sm text-slate-500">
+            <CheckCircle className="w-12 h-12 text-portal-ink" />
+            <p className="font-display font-bold text-xl text-portal-ink dark:text-white">Checked In</p>
+            <p className="text-sm text-portal-label">
               {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </p>
           </>
@@ -81,32 +81,32 @@ export function MemberAttendance() {
 
       {/* Attendance History */}
       <motion.div
-        className="rounded-2xl p-5 backdrop-blur-glass border bg-white/70 dark:bg-slate-900/65 border-white/45 dark:border-white/[0.08]"
+        className="rounded-2xl p-5 backdrop-blur-glass border bg-white/70 dark:bg-portal-surface border-white/45 dark:border-white/[0.08]"
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
       >
-        <h3 className="font-display font-semibold text-base text-slate-900 dark:text-white mb-4">Attendance History</h3>
+        <h3 className="font-display font-semibold text-base text-portal-ink dark:text-white mb-4">Attendance History</h3>
         <div className="space-y-3">
           {myAttendance.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-4">No attendance records yet</p>
+            <p className="text-sm text-portal-label text-center py-4">No attendance records yet</p>
           ) : (
             myAttendance.slice(0, 8).map((record, i) => (
               <motion.div
                 key={record.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03]"
+                className="flex items-center justify-between p-3 rounded-xl bg-portal-surface dark:bg-white/[0.03]"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 + i * 0.05 }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                  <div className="w-8 h-8 rounded-full bg-portal-surface flex items-center justify-center">
+                    <CheckCircle className="w-4 h-4 text-portal-ink" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{record.sessionName}</p>
-                    <p className="text-xs text-slate-400">{new Date(record.checkInTime).toLocaleDateString()}</p>
+                    <p className="text-sm font-medium text-portal-ink dark:text-portal-label">{record.sessionName}</p>
+                    <p className="text-xs text-portal-label">{new Date(record.checkInTime).toLocaleDateString()}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-xs text-emerald-500 font-medium">
+                <div className="flex items-center gap-1 text-xs text-portal-ink font-medium">
                   <Clock className="w-3 h-3" />
                   {new Date(record.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>

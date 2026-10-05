@@ -1,177 +1,79 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { ArrowRight, Moon, Sun } from 'lucide-react';
+import youthLogo from '@/assets/youth-logo.png';
+import { DevQuickLogin, type DevQuickLoginOption } from '@/components/auth/DevQuickLogin';
+import { LoginIllustration } from '@/components/auth/LoginIllustration';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 
-const DEV_USERS = [
-  { label: 'Super Admin', email: 'superadmin@mosyf.org', password: 'admin123', role: 'super_admin' },
-  { label: 'Executive', email: 'executive@mosyf.org', password: 'exec123', role: 'executive' },
+const DEV_LOGIN_OPTIONS: DevQuickLoginOption[] = [
+  { label: 'Super Admin', email: 'superadmin@mosyf.org', password: 'admin123' },
+  { label: 'Executive', email: 'executive@mosyf.org', password: 'exec123' },
 ];
+
+function dashboardPath(role?: string) {
+  if (role === 'super_admin' || role === 'admin') return '/admin/dashboard';
+  if (role === 'executive') return '/executive/dashboard';
+  if (role === 'member') return '/member/home';
+  return '/login';
+}
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+  const [forgotOpen, setForgotOpen] = useState(false);
   const { login } = useAuth();
+  const { resolvedTheme, toggleTheme } = useTheme();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const completeLogin = (role?: string) => { setSuccess(true); window.setTimeout(() => navigate(dashboardPath(role), { replace: true }), 520); };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const result = await login(email, password);
-    setLoading(false);
-
-    if (result.success) {
-      addToast({ type: 'success', title: 'Welcome back!', description: 'Redirecting to your dashboard...' });
-      setTimeout(() => {
-        const role = result.role;
-        if (role === 'super_admin' || role === 'admin') navigate('/admin/dashboard');
-        else if (role === 'executive') navigate('/executive/dashboard');
-        else if (role === 'member') navigate('/member/home');
-        else navigate('/');
-      }, 500);
-    } else {
-      addToast({ type: 'error', title: 'Invalid credentials', description: 'Please check your email and password.' });
-    }
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setLoading(true);
+    try {
+      const result = await login(email, password);
+      if (result.success) { addToast({ type: 'success', title: 'Welcome back.', description: 'Taking you to your dashboard.' }); completeLogin(result.role); }
+      else { setError("Those credentials don't match our records."); addToast({ type: 'error', title: 'Sign in failed', description: "Those credentials don't match our records." }); }
+    } catch { setError('Something went wrong. Please check your connection and try again.'); addToast({ type: 'error', title: 'Network error', description: 'Please check your connection and try again.' }); }
+    finally { setLoading(false); }
+  };
+  const handleDevLogin = async (option: DevQuickLoginOption) => {
+    setEmail(option.email); setPassword(option.password); setError(''); setLoading(true);
+    try {
+      const result = await login(option.email, option.password);
+      if (result.success) { addToast({ type: 'success', title: 'Logged in as ' + option.label, description: 'Development shortcut authenticated.' }); completeLogin(result.role); }
+      else setError("Those development credentials don't match our records.");
+    } catch { setError('Something went wrong. Please check your connection and try again.'); }
+    finally { setLoading(false); }
   };
 
-  const quickLogin = async (devUser: typeof DEV_USERS[0]) => {
-    setEmail(devUser.email);
-    setPassword(devUser.password);
-    setLoading(true);
-    const result = await login(devUser.email, devUser.password);
-    setLoading(false);
-    if (result.success) {
-      addToast({ type: 'success', title: `Logged in as ${devUser.label}` });
-      setTimeout(() => {
-        if (devUser.role === 'super_admin' || devUser.role === 'admin') navigate('/admin/dashboard');
-        else if (devUser.role === 'executive') navigate('/executive/dashboard');
-        else navigate('/member/home');
-      }, 300);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex bg-slate-100 dark:bg-[#0B1426] transition-colors duration-400">
-      {/* Left Panel */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center"
-        style={{ background: 'linear-gradient(135deg, #1A3A6B, #6C5CE7)' }}
-      >
-        <div className="absolute inset-0 opacity-10">
-          <svg className="w-full h-full" viewBox="0 0 400 400" fill="none">
-            <path d="M200 50L50 150V300L200 350L350 300V150L200 50Z" stroke="white" strokeWidth="2" fill="none"
-              style={{ animation: 'float 8s ease-in-out infinite' }} />
-            <path d="M200 100L100 170V280L200 320L300 280V170L200 100Z" stroke="white" strokeWidth="1.5" fill="none"
-              style={{ animation: 'float-reverse 10s ease-in-out infinite' }} />
-          </svg>
-        </div>
-        <div className="relative z-10 text-center text-white px-12">
-          <div className="w-24 h-24 rounded-3xl bg-white/10 backdrop-blur-lg flex items-center justify-center mx-auto mb-8 animate-float">
-            <svg className="w-12 h-12 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
-          </div>
-          <h2 className="font-display font-bold text-3xl mb-4">MOSYF Convention Portal</h2>
-          <p className="text-white/70 max-w-sm mx-auto">The most modern platform for managing youth fellowship conventions.</p>
-        </div>
-      </div>
-
-      {/* Right Panel */}
-      <div className="flex-1 flex items-center justify-center p-6 relative">
-        {/* Floating orbs */}
-        <div className="floating-orb w-[120px] h-[120px] top-20 right-20" />
-        <div className="floating-orb w-[80px] h-[80px] bottom-32 left-16 animate-float-reverse" />
-
-        <motion.div
-          className="w-full max-w-[420px] relative z-10"
-          initial={{ opacity: 0, y: 30, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
-        >
-          <div className={`rounded-3xl p-10 backdrop-blur-glass-lg border ${
-            'bg-white/85 border-white/50 dark:bg-slate-900/80 dark:border-white/[0.1]'
-          }`}
-            style={{ boxShadow: '0 24px 80px rgba(26, 58, 107, 0.15)' }}
-          >
-            <div className="text-center mb-8">
-              <h2 className="font-display font-bold text-2xl text-slate-900 dark:text-white">Welcome Back</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Super Admin and Executive sign in</p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 block">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="glass-input w-full pl-12"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 block">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="glass-input w-full pl-12 pr-12"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              <motion.button
-                type="submit"
-                disabled={loading}
-                className="gradient-btn w-full h-12 flex items-center justify-center gap-2 disabled:opacity-80"
-                whileHover={{ y: -1 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : 'Sign In'}
-              </motion.button>
-            </form>
-
-            {/* Dev Quick Login */}
-            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-white/[0.06]">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 text-center mb-3">Quick Login (Dev Mode)</p>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {DEV_USERS.map((u) => (
-                  <motion.button
-                    key={u.email}
-                    onClick={() => quickLogin(u)}
-                    className="px-3 py-1.5 rounded-full text-xs font-medium bg-purple-accent/10 text-purple-accent border border-purple-accent/20 hover:bg-purple-accent/20 transition-colors"
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {u.label}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    </div>
-  );
+  return <main className="portal-theme portal-canvas min-h-[100dvh] overflow-x-hidden">
+    <header className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-4 py-5 sm:px-8">
+      <Link to="/login" aria-label="MOSYF login" className="portal-focus inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-portal-line px-3 text-sm font-medium text-portal-ink"><img src={youthLogo} alt="" className="h-7 w-7 object-contain" /> MOSYF</Link>
+      <div className="flex items-center gap-2"><button type="button" onClick={toggleTheme} aria-label="Change theme" title="Change theme" className="portal-focus grid h-11 w-11 place-items-center rounded-full border border-portal-line text-portal-ink">{resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button><Link to="/register/member" className="portal-focus inline-flex min-h-11 items-center rounded-full border border-portal-line px-3 text-xs font-medium text-portal-ink sm:px-4 sm:text-sm">Have a registration link?</Link></div>
+    </header>
+    <section className="relative mx-auto flex min-h-[calc(100dvh-84px)] max-w-[1400px] items-center justify-center px-4 pb-8 sm:px-8">
+      <div className="absolute left-4 top-1/2 hidden -translate-y-1/2 lg:block"><LoginIllustration side="left" /></div><div className="absolute right-4 top-1/2 hidden -translate-y-1/2 lg:block"><LoginIllustration side="right" /></div>
+      <motion.div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-portal-line bg-white p-6 shadow-[0_20px_60px_rgb(40_37_22_/_0.12)] dark:bg-portal-surface sm:p-9" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+        <div className="mb-7 text-center"><h1 className="text-3xl font-semibold text-portal-ink">Welcome back</h1><p className="mx-auto mt-2 max-w-[250px] text-sm leading-6 text-portal-label">Sign in to your MOSYF Convention Portal.</p></div>
+        {error && <p role="alert" className="mb-4 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">{error}</p>}
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <div><label htmlFor="email" className="sr-only">Email address</label><input id="email" type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="Email address" autoComplete="email" required aria-invalid={Boolean(error)} className="portal-focus h-[52px] w-full rounded-2xl border border-portal-line bg-white px-4 text-sm text-portal-ink outline-none placeholder:text-portal-label focus:border-portal-accent focus:ring-2 focus:ring-portal-accent/45 dark:bg-[#1E1E1C]" /></div>
+          <div><label htmlFor="password" className="sr-only">Password</label><div className="relative"><input id="password" type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="Password" autoComplete="current-password" required aria-invalid={Boolean(error)} className="portal-focus h-[52px] w-full rounded-2xl border border-portal-line bg-white px-4 pr-16 text-sm text-portal-ink outline-none placeholder:text-portal-label focus:border-portal-accent focus:ring-2 focus:ring-portal-accent/45 dark:bg-[#1E1E1C]" /><button type="button" onClick={() => setShowPassword(current => !current)} className="portal-focus absolute right-2 top-1/2 min-h-9 -translate-y-1/2 px-2 text-xs font-medium text-portal-ink" aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? 'Hide' : 'Show'}</button></div></div>
+          <button type="button" onClick={() => setForgotOpen(true)} className="portal-focus text-left text-sm font-medium text-portal-ink">Forgot password?</button>
+          <motion.button type="submit" disabled={loading || success} className="group flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-portal-dark px-5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-75 dark:bg-portal-accent dark:text-portal-accent-ink" whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}>{loading ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/25 border-t-white dark:border-portal-ink/25 dark:border-t-portal-ink" /> : success ? 'Welcome back' : <>Sign In <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></>}</motion.button>
+        </form>
+        <DevQuickLogin visible={import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_LOGIN === 'true'} options={DEV_LOGIN_OPTIONS} disabled={loading || success} activeEmail={email} onSelect={handleDevLogin} />
+        <p className="mt-7 text-center text-xs text-portal-label">Have a registration link? <Link to="/register/member" className="font-semibold text-portal-ink underline underline-offset-4">Register now</Link></p>
+      </motion.div>
+    </section>
+    {forgotOpen && <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-labelledby="forgot-password-title"><div className="w-full max-w-sm rounded-[28px] border border-portal-line bg-portal-from p-6 shadow-surface"><h2 id="forgot-password-title" className="text-lg font-semibold text-portal-ink">Password help</h2><p className="mt-2 text-sm leading-6 text-portal-label">Please contact a convention admin to reset your password.</p><button type="button" onClick={() => setForgotOpen(false)} className="portal-focus mt-5 min-h-11 rounded-full bg-portal-dark px-5 text-sm font-medium text-white">Close</button></div></div>}
+  </main>;
 }
