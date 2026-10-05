@@ -4,19 +4,17 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Check, LogIn, ShieldAlert, Upload } from 'lucide-react';
 import { AuthHeader } from '@/components/auth/AuthExperience';
 import { useAppData } from '@/contexts/AppDataContext';
-import { addRegisteredAuthUser } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
-import { sendRegistrationConfirmation } from '@/lib/registrationEmail';
+import { submitRegistration } from '@/lib/supabase/registration';
 import { EXECUTIVE_ROLES } from '@/types';
 import type { FellowshipBand, Department } from '@/types';
 
 export function ExecutiveRegistration() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { addExecutive, bands, departments, validateGeneratedLink, recordGeneratedLinkUse, getStatusUrl } = useAppData();
+  const { bands, departments } = useAppData();
   const { addToast } = useToast();
   const token = new URLSearchParams(location.search).get('token');
-  const registrationLink = validateGeneratedLink('executive', token);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [newId, setNewId] = useState('');
@@ -48,7 +46,7 @@ export function ExecutiveRegistration() {
   };
 
   const submit = async () => {
-    if (!registrationLink) {
+    if (!token) {
       addToast({ type: 'error', title: 'Invalid executive registration link' });
       return;
     }
@@ -59,61 +57,19 @@ export function ExecutiveRegistration() {
     }
 
     setSubmitting(true);
-    await new Promise(r => setTimeout(r, 1000));
-
     try {
       const normalizedEmail = form.email.trim().toLowerCase();
-      const exec = addExecutive({
-        fullName: form.fullName.trim(),
-        leadershipRole: form.leadershipRole,
-        department: form.department as Department,
-        fellowshipBand: form.fellowshipBand as FellowshipBand,
-        phoneNumber: form.phoneNumber.trim(),
-        email: normalizedEmail,
-        address: form.address.trim(),
-        profilePhoto: form.profilePhoto,
+      const band = bands.find(item => item.name === form.fellowshipBand);
+      const department = departments.find(item => item.name === form.department);
+      const response = await submitRegistration(token, {
+        id: crypto.randomUUID(), full_name: form.fullName.trim(), leadership_role: form.leadershipRole, email: normalizedEmail,
+        phone: form.phoneNumber.trim(), address: form.address.trim(), photo_path: form.profilePhoto, band_id: band?.id ?? '',
+        department_ids: department ? [department.id] : [], consent: true, guardian_consent: false, client_created_at: new Date().toISOString(),
       });
-      const password = `exec-${exec.id.slice(-4)}`;
-
-      addRegisteredAuthUser({
-        email: exec.email,
-        password,
-        user: { email: exec.email, name: exec.fullName, role: 'executive' },
-      });
-      recordGeneratedLinkUse(registrationLink.id);
-      setNewId(exec.id);
-      setTempPassword(password);
+      setNewId(response.exec_code ?? response.member_code);
+      setTempPassword('Your convention administrator will provide staff sign-in details after approval.');
       setSuccess(true);
-      addToast({ type: 'success', title: 'Executive registration complete!', description: 'Preparing confirmation email...' });
-
-      try {
-        await sendRegistrationConfirmation({
-          type: 'executive',
-          to: exec.email,
-          subject: 'Your MOSYF Convention Registration is Confirmed',
-          statusUrl: getStatusUrl(exec),
-          tagUrl: getStatusUrl(exec),
-          executive: {
-            id: exec.id,
-            fullName: exec.fullName,
-            email: exec.email,
-            phoneNumber: exec.phoneNumber,
-            leadershipRole: exec.leadershipRole,
-            department: exec.department,
-            fellowshipBand: exec.fellowshipBand,
-            registeredAt: exec.registeredAt,
-            temporaryPassword: password,
-          },
-        });
-        addToast({ type: 'success', title: 'Confirmation email sent', description: `Dashboard details were sent to ${exec.email}.` });
-      } catch (emailError) {
-        addToast({
-          type: 'warning',
-          title: 'Email not sent automatically',
-          description: emailError instanceof Error ? emailError.message : 'Unable to send confirmation email.',
-          duration: 7000,
-        });
-      }
+      addToast({ type: 'success', title: 'Executive registration complete!' });
     } catch (error) {
       addToast({ type: 'error', title: error instanceof Error ? error.message : 'Unable to complete registration' });
     } finally {
@@ -137,7 +93,7 @@ export function ExecutiveRegistration() {
         <div
           className="rounded-[30px] border border-portal-line bg-white/82 p-6 shadow-[0_28px_90px_rgba(138,138,133,0.13)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-white/[0.065] sm:p-8"
         >
-          {!registrationLink ? (
+          {!token ? (
             <div className="text-center py-8">
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
                 <ShieldAlert className="w-8 h-8" />

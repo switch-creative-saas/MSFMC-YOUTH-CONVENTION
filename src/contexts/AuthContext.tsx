@@ -1,137 +1,27 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { StoredAuthUser, User, UserRole } from '@/types';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import type { User, UserRole } from '@/types';
+import { supabase } from '@/lib/supabase/client';
 
-interface AuthContextType {
-  user: User | null;
-  role: UserRole | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; role?: string }>;
-  logout: () => void;
-  isLoading: boolean;
-}
-
-const SEEDED_USERS: Record<string, { password: string; user: User }> = {
-  'superadmin@mosyf.org': {
-    password: 'admin123',
-    user: { email: 'superadmin@mosyf.org', name: 'Super Admin', role: 'super_admin' },
-  },
-  'admin@mosyf.org': {
-    password: 'admin123',
-    user: { email: 'admin@mosyf.org', name: 'Admin User', role: 'admin' },
-  },
-  'executive@mosyf.org': {
-    password: 'exec123',
-    user: { email: 'executive@mosyf.org', name: 'Michael Emenike', role: 'executive' },
-  },
-  'member@mosyf.org': {
-    password: 'member123',
-    user: { email: 'member@mosyf.org', name: 'John Okafor', role: 'member' },
-  },
-};
-
-export const REGISTERED_USERS_STORAGE_KEY = 'mosyf_registered_users';
-
-export function addRegisteredAuthUser(authUser: StoredAuthUser) {
-  try {
-    const stored = window.localStorage.getItem(REGISTERED_USERS_STORAGE_KEY);
-    const users = stored ? JSON.parse(stored) as StoredAuthUser[] : [];
-    const normalizedEmail = authUser.email.trim().toLowerCase();
-    const nextUsers = users.filter(item => item.email.trim().toLowerCase() !== normalizedEmail);
-    nextUsers.push({
-      ...authUser,
-      email: normalizedEmail,
-      user: { ...authUser.user, email: normalizedEmail },
-    });
-    window.localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
-  } catch (error) {
-    console.warn('Unable to persist registered user credentials.', error);
-  }
-}
-
-export function updateRegisteredAuthUserRole(email: string, role: UserRole) {
-  try {
-    const stored = window.localStorage.getItem(REGISTERED_USERS_STORAGE_KEY);
-    const users = stored ? JSON.parse(stored) as StoredAuthUser[] : [];
-    const normalizedEmail = email.trim().toLowerCase();
-    const nextUsers = users.map(item => item.email.trim().toLowerCase() === normalizedEmail ? {
-      ...item,
-      user: { ...item.user, role },
-    } : item);
-    window.localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(nextUsers));
-  } catch (error) {
-    console.warn('Unable to update registered user role.', error);
-  }
-}
-
-function readRegisteredUsers(): Record<string, { password: string; user: User }> {
-  try {
-    const stored = window.localStorage.getItem(REGISTERED_USERS_STORAGE_KEY);
-    const users = stored ? JSON.parse(stored) as StoredAuthUser[] : [];
-    return users.reduce<Record<string, { password: string; user: User }>>((acc, item) => {
-      acc[item.email.trim().toLowerCase()] = { password: item.password, user: item.user };
-      return acc;
-    }, {});
-  } catch {
-    return {};
-  }
-}
-
+interface AuthContextType { user: User | null; role: UserRole | null; login: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>; logout: () => Promise<void>; isLoading: boolean; }
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function getProfile(userId: string, email: string): Promise<User | null> {
+  const { data, error } = await (supabase as any).from('profiles').select('email, full_name, role').eq('user_id', userId).maybeSingle();
+  if (error || !data || data.role === 'member') return null;
+  return { email: data.email || email, name: data.full_name || email, role: data.role as UserRole };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
+  const [user, setUser] = useState<User | null>(null); const [role, setRole] = useState<UserRole | null>(null); const [isLoading, setIsLoading] = useState(true);
   useEffect(() => {
-    const saved = localStorage.getItem('mosyf_auth');
-    if (saved) {
-      try {
-        const { user: savedUser } = JSON.parse(saved);
-        setUser(savedUser);
-        setRole(savedUser.role);
-      } catch {
-        localStorage.removeItem('mosyf_auth');
-      }
-    }
-    setIsLoading(false);
+    let mounted = true;
+    const sync = async () => { const { data } = await supabase.auth.getSession(); const sessionUser = data.session?.user; const profile = sessionUser ? await getProfile(sessionUser.id, sessionUser.email ?? '') : null; if (mounted) { setUser(profile); setRole(profile?.role ?? null); setIsLoading(false); } };
+    void sync();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => { void (async () => { const account = session?.user; const profile = account ? await getProfile(account.id, account.email ?? '') : null; if (mounted) { setUser(profile); setRole(profile?.role ?? null); setIsLoading(false); } })(); });
+    return () => { mounted = false; listener.subscription.unsubscribe(); };
   }, []);
-
-  const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 800));
-    
-    const normalizedEmail = email.trim().toLowerCase();
-    const found = {
-      ...SEEDED_USERS,
-      ...readRegisteredUsers(),
-    }[normalizedEmail];
-    if (found && found.password === password) {
-      setUser(found.user);
-      setRole(found.user.role);
-      localStorage.setItem('mosyf_auth', JSON.stringify({ user: found.user }));
-      setIsLoading(false);
-      return { success: true, role: found.user.role };
-    }
-    
-    setIsLoading(false);
-    return { success: false };
-  }, []);
-
-  const logout = useCallback(() => {
-    setUser(null);
-    setRole(null);
-    localStorage.removeItem('mosyf_auth');
-  }, []);
-
-  return (
-    <AuthContext.Provider value={{ user, role, login, logout, isLoading }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const login = useCallback(async (email: string, password: string) => { const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); if (error || !data.user) return { success: false, error: error?.message ?? 'Unable to sign in.' }; const profile = await getProfile(data.user.id, data.user.email ?? email); if (!profile) { await supabase.auth.signOut(); return { success: false, error: 'This account does not have staff access.' }; } setUser(profile); setRole(profile.role); return { success: true, role: profile.role }; }, []);
+  const logout = useCallback(async () => { await supabase.auth.signOut(); setUser(null); setRole(null); }, []);
+  return <AuthContext.Provider value={{ user, role, login, logout, isLoading }}>{children}</AuthContext.Provider>;
 }
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
-}
+export function useAuth() { const ctx = useContext(AuthContext); if (!ctx) throw new Error('useAuth must be used within AuthProvider'); return ctx; }

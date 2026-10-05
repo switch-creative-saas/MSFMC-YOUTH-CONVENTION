@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BadgeCheck, CalendarDays, Check, Clock, Gift, Search, ShieldCheck, Ticket, Trophy, Utensils, XCircle } from 'lucide-react';
@@ -6,6 +6,7 @@ import { ExecutiveConventionTag, ConventionTag } from '@/components/ConventionTa
 import { AttendeePortalLayout } from '@/components/attendee/AttendeePortalLayout';
 import { useAppData } from '@/contexts/AppDataContext';
 import type { AccessItemType, Executive, Member } from '@/types';
+import { supabase } from '@/lib/supabase/client';
 
 const activityNames = ['Sports', 'Bible Quiz', 'Drama Competition', 'Music Night', 'Leadership Workshop'];
 
@@ -183,8 +184,30 @@ function Info({ label, value }: { label: string; value: string }) {
 
 export function ConventionStatusPortal() {
   const { token } = useParams();
-  const { findAttendeeByStatusToken } = useAppData();
-  const result = findAttendeeByStatusToken(token);
+  const [result, setResult] = useState<{ type: 'member'; attendee: Member } | { type: 'executive'; attendee: Executive } | null | undefined>(undefined);
+
+  useEffect(() => {
+    let active = true;
+    if (!token) { setResult(null); return; }
+    void (async () => {
+      const { data, error } = await (supabase as any).rpc('get_status_by_token', { p_token: token });
+      if (!active) return;
+      if (error || !data) { setResult(null); return; }
+      const status = data as Record<string, any>;
+      const claims = Object.fromEntries((status.claims ?? []).map((claim: { resource: string; claimed_at: string }) => [claim.resource, claim.claimed_at]));
+      const executive = status.executive as { exec_code?: string; leadership_role?: string; approval?: string } | null;
+      if (executive?.exec_code) {
+        setResult({ type: 'executive', attendee: { id: executive.exec_code, statusToken: token, fullName: String(status.full_name), leadershipRole: executive.leadership_role ?? 'Executive', department: 'None', fellowshipBand: (status.band ?? 'None') as Executive['fellowshipBand'], phoneNumber: '', email: '', address: '', registeredAt: String(status.registered_at ?? new Date().toISOString()), registrationStatus: executive.approval === 'approved' ? 'admin' : 'executive', accessClaims: claims } });
+      } else {
+        setResult({ type: 'member', attendee: { id: String(status.member_code), statusToken: token, fullName: String(status.full_name), phoneNumber: '', email: '', gender: 'Male', dateOfBirth: '', address: '', occupation: '', emergencyContact: '', churchBranch: '', fellowshipBand: (status.band ?? 'None') as Member['fellowshipBand'], departments: [], isFirstTimer: false, wantsPermanentMembership: null, conventionGroup: `Group ${status.convention_group ?? 'E'}` as Member['conventionGroup'], registeredAt: String(status.registered_at ?? new Date().toISOString()), qrCode: String(status.member_code), biometricStatus: status.biometric_status === 'verified' ? 'verified_checked_in' : 'pending_verification', accessClaims: claims } });
+      }
+    })();
+    return () => { active = false; };
+  }, [token]);
+
+  if (result === undefined) {
+    return <AttendeePortalLayout compact><p className="text-sm text-portal-label">Loading convention status...</p></AttendeePortalLayout>;
+  }
 
   if (!result) {
     return (
@@ -203,36 +226,19 @@ export function ConventionStatusPortal() {
 }
 
 export function ConventionStatusSearchPage() {
-  const { members, executives } = useAppData();
   const [query, setQuery] = useState('');
-  const normalized = query.trim().toLowerCase();
-  const results = normalized.length > 1
-    ? [
-        ...members.filter(member => member.id.toLowerCase().includes(normalized) || member.fullName.toLowerCase().includes(normalized)).map(member => ({ type: 'member' as const, attendee: member })),
-        ...executives.filter(exec => exec.id.toLowerCase().includes(normalized) || exec.fullName.toLowerCase().includes(normalized)).map(exec => ({ type: 'executive' as const, attendee: exec })),
-      ].slice(0, 8)
-    : [];
+  const token = query.trim();
 
   return (
     <AttendeePortalLayout compact>
         <h1 className="text-4xl font-black tracking-tight">Check your MOSYF Convention status</h1>
-        <p className="mt-3 text-portal-label dark:text-portal-label">Search by member ID, executive ID, or name. Results show limited convention status only.</p>
+        <p className="mt-3 text-portal-label dark:text-portal-label">Enter the private convention status token from your registration confirmation.</p>
         <div className="relative mt-8">
           <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-portal-label" />
-          <input value={query} onChange={event => setQuery(event.target.value)} className="glass-input h-14 w-full rounded-2xl pl-12" placeholder="Enter Member ID or name" />
+          <input value={query} onChange={event => setQuery(event.target.value)} className="glass-input h-14 w-full rounded-2xl pl-12" placeholder="Enter your status token" />
         </div>
         <div className="mt-5 space-y-3">
-          {results.map(({ type, attendee }) => (
-            <Link key={attendee.id} to={`/convention/status/${attendee.statusToken}`} className="block rounded-2xl border border-portal-line bg-portal-surface p-4 shadow-sm transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-portal-surface">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-black">{attendee.fullName}</p>
-                  <p className="font-mono text-sm text-portal-ink dark:text-portal-ink">{attendee.id}</p>
-                </div>
-                <StatusPill complete label={type === 'executive' && attendee.registrationStatus === 'admin' ? 'Admin Approved' : 'Registered'} />
-              </div>
-            </Link>
-          ))}
+          {token && <Link to={`/status/${encodeURIComponent(token)}`} className="inline-flex rounded-2xl bg-portal-dark px-5 py-3 text-sm font-bold text-white">View convention status</Link>}
         </div>
     </AttendeePortalLayout>
   );

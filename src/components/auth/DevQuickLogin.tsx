@@ -16,7 +16,7 @@ type DevQuickLoginProps = {
 };
 
 export function DevQuickLogin({ visible = true, options, disabled = false, activeEmail, onSelect }: DevQuickLoginProps) {
-  if (!visible || !(import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_LOGIN === 'true')) return null;
+  if (!visible || !(import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_LOGIN === 'true')) return null;
 
   return (
     <section className="mt-7 border-t border-portal-line pt-5 dark:border-white/10" aria-label="Development quick login">

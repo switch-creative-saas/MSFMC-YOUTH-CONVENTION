@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { ShieldCheck, ShieldMinus, UserCog, Clock, Activity, Search } from 'lucide-react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { useAppData } from '@/contexts/AppDataContext';
-import { updateRegisteredAuthUserRole } from '@/contexts/AuthContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { PillButton } from '@/components/ui-kit/PillButton';
@@ -47,7 +46,6 @@ export function AdminAccessManagement() {
     const executive = executives.find(exec => exec.id === executiveId);
     if (!executive) return;
     promoteExecutiveToAdmin(executiveId, actorEmail, actorName);
-    updateRegisteredAuthUserRole(executive.email, 'admin');
     addToast({ type: 'success', title: `${executive.fullName} can now access the admin dashboard` });
   };
 
@@ -55,7 +53,6 @@ export function AdminAccessManagement() {
     const executive = executives.find(exec => exec.id === executiveId);
     if (!executive) return;
     revokeExecutiveAdmin(executiveId, actorEmail, actorName);
-    updateRegisteredAuthUserRole(executive.email, 'executive');
     addToast({ type: 'warning', title: `${executive.fullName} admin access revoked` });
   };
 

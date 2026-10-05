@@ -42,3 +42,13 @@ export interface DataRepository {
   subscribe(listener: () => void): () => void;
   reset(): void;
 }
+
+export interface AsyncDataRepository {
+  readonly currentEventId: string;
+  list<K extends RepositoryEntity>(entity: K, eventId?: string): Promise<RepositoryRecordMap[K][]>;
+  replace<K extends RepositoryEntity>(entity: K, records: RepositoryRecordMap[K][]): Promise<void>;
+  write<K extends RepositoryEntity>(entity: K, record: Omit<RepositoryRecordMap[K], 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'eventId'> & Partial<Pick<RepositoryRecordMap[K], 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'eventId'>>, createdBy?: string): Promise<RepositoryRecordMap[K]>;
+  getSettings(): Promise<ConventionSettings | null>;
+  setSettings(settings: ConventionSettings): Promise<ConventionSettings>;
+  subscribe(listener: () => void): () => void;
+}

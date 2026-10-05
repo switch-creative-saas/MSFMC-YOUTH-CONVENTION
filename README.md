@@ -72,3 +72,9 @@ export default defineConfig([
 ])
 ```
 # MSFMC-YOUTH-CONVENTION
+
+## Local Supabase development
+
+Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`. Deploy the registration function with `supabase functions deploy register` after setting `SUPABASE_SERVICE_ROLE_KEY` in the Supabase project secrets.
+
+The optional quick-login pills are development-only. To use them locally, set `VITE_ENABLE_DEV_LOGIN=true` plus the two real development staff account email/password pairs from `.env.example`. They are removed from production builds.

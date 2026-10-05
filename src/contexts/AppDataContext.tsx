@@ -22,7 +22,7 @@ import type {
   ConventionRoleName,
   Department,
 } from '@/types';
-import { localStorageRepository } from '@/lib/repository';
+import { dataBackend, localStorageRepository, SupabaseRepository } from '@/lib/repository';
 import { assignConventionGroup as assignLeastPopulatedGroup } from '@/lib/groups';
 
 interface AppDataContextType {
@@ -62,7 +62,6 @@ interface AppDataContextType {
   updateMember: (id: string, updates: Partial<Member>) => void;
   generateMemberId: () => string;
   assignConventionGroup: (band: FellowshipBand) => ConventionGroup;
-  resetDemoData: () => void;
   saveListItem: (entity: 'bands' | 'departments' | 'churchGroups' | 'churchLocations', item: Partial<Band> & Pick<Band, 'name'>, actorEmail: string, actorName: string) => void;
   deleteListItem: (entity: 'bands' | 'departments' | 'churchGroups' | 'churchLocations', id: string, actorEmail: string, actorName: string) => { ok: boolean; message?: string };
   saveProgramme: (programme: Partial<Programme> & Pick<Programme, 'title' | 'date' | 'startTime' | 'endTime' | 'location'>, actorEmail: string, actorName: string) => void;
@@ -263,24 +262,47 @@ function ensureExecutiveTokens(executives: Executive[]) {
 }
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const currentEventId = localStorageRepository.currentEventId;
-  const [members, setMembers] = useState<Member[]>(() => ensureMemberTokens(readStoredList<Member>(MEMBERS_STORAGE_KEY, MOCK_MEMBERS)));
-  const [executives, setExecutives] = useState<Executive[]>(() => ensureExecutiveTokens(readStoredList<Executive>(EXECUTIVES_STORAGE_KEY, MOCK_EXECUTIVES)));
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => readStoredList<AttendanceRecord>(ATTENDANCE_STORAGE_KEY, MOCK_ATTENDANCE));
-  const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>(() => readStoredList<BiometricLog>(BIOMETRIC_LOGS_STORAGE_KEY, []));
+  const useSupabase = dataBackend === 'supabase';
+  const [supabaseRepository] = useState(() => useSupabase ? new SupabaseRepository() : null);
+  const [currentEventId, setCurrentEventId] = useState(localStorageRepository.currentEventId);
+  const [members, setMembers] = useState<Member[]>(() => useSupabase ? [] : ensureMemberTokens(readStoredList<Member>(MEMBERS_STORAGE_KEY, MOCK_MEMBERS)));
+  const [executives, setExecutives] = useState<Executive[]>(() => useSupabase ? [] : ensureExecutiveTokens(readStoredList<Executive>(EXECUTIVES_STORAGE_KEY, MOCK_EXECUTIVES)));
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => useSupabase ? [] : readStoredList<AttendanceRecord>(ATTENDANCE_STORAGE_KEY, MOCK_ATTENDANCE));
+  const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>(() => useSupabase ? [] : readStoredList<BiometricLog>(BIOMETRIC_LOGS_STORAGE_KEY, []));
   const [biometricDevices, setBiometricDevices] = useState<BiometricDevice[]>(DEFAULT_BIOMETRIC_DEVICES);
-  const [adminActivities, setAdminActivities] = useState<AdminActivityLog[]>(() => readStoredList<AdminActivityLog>(ADMIN_ACTIVITIES_STORAGE_KEY, []));
-  const [firstTimers, setFirstTimers] = useState<FirstTimer[]>(() => readStoredList<FirstTimer>(FIRST_TIMERS_STORAGE_KEY, MOCK_FIRST_TIMERS));
-  const [conventionSettings, setConventionSettings] = useState<ConventionSettings>(() => readStoredValue<ConventionSettings>(CONVENTION_SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS));
-  const [generatedLinks, setGeneratedLinks] = useState<GeneratedLink[]>(() => readStoredList<GeneratedLink>(GENERATED_LINKS_STORAGE_KEY, []));
-  const [bands, setBands] = useState<Band[]>(() => localStorageRepository.list('bands'));
-  const [departments, setDepartments] = useState<DepartmentItem[]>(() => localStorageRepository.list('departments'));
-  const [churchGroups, setChurchGroups] = useState<ChurchGroup[]>(() => localStorageRepository.list('churchGroups'));
-  const [churchLocations, setChurchLocations] = useState<ChurchLocation[]>(() => localStorageRepository.list('churchLocations'));
-  const [programmes, setProgrammes] = useState<Programme[]>(() => localStorageRepository.list('programmes'));
-  const [conventionRoles, setConventionRoles] = useState<ConventionRole[]>(() => localStorageRepository.list('conventionRoles'));
+  const [adminActivities, setAdminActivities] = useState<AdminActivityLog[]>(() => useSupabase ? [] : readStoredList<AdminActivityLog>(ADMIN_ACTIVITIES_STORAGE_KEY, []));
+  const [firstTimers, setFirstTimers] = useState<FirstTimer[]>(() => useSupabase ? [] : readStoredList<FirstTimer>(FIRST_TIMERS_STORAGE_KEY, MOCK_FIRST_TIMERS));
+  const [conventionSettings, setConventionSettings] = useState<ConventionSettings>(() => useSupabase ? { ...DEFAULT_SETTINGS, name: '', location: '', sessions: [] } : readStoredValue<ConventionSettings>(CONVENTION_SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS));
+  const [generatedLinks, setGeneratedLinks] = useState<GeneratedLink[]>(() => useSupabase ? [] : readStoredList<GeneratedLink>(GENERATED_LINKS_STORAGE_KEY, []));
+  const [bands, setBands] = useState<Band[]>(() => useSupabase ? [] : localStorageRepository.list('bands'));
+  const [departments, setDepartments] = useState<DepartmentItem[]>(() => useSupabase ? [] : localStorageRepository.list('departments'));
+  const [churchGroups, setChurchGroups] = useState<ChurchGroup[]>(() => useSupabase ? [] : localStorageRepository.list('churchGroups'));
+  const [churchLocations, setChurchLocations] = useState<ChurchLocation[]>(() => useSupabase ? [] : localStorageRepository.list('churchLocations'));
+  const [programmes, setProgrammes] = useState<Programme[]>(() => useSupabase ? [] : localStorageRepository.list('programmes'));
+  const [conventionRoles, setConventionRoles] = useState<ConventionRole[]>(() => useSupabase ? [] : localStorageRepository.list('conventionRoles'));
 
   useEffect(() => {
+    if (!supabaseRepository) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const [events, remoteMembers, remoteExecutives, remoteAttendance, remoteActivities, remoteLinks, remoteBands, remoteDepartments, remoteGroups, remoteLocations, remoteProgrammes, remoteRoles, settings] = await Promise.all([
+          supabaseRepository.list('events'), supabaseRepository.list('members'), supabaseRepository.list('executives'), supabaseRepository.list('attendance'), supabaseRepository.list('adminActivities'), supabaseRepository.list('generatedLinks'), supabaseRepository.list('bands'), supabaseRepository.list('departments'), supabaseRepository.list('churchGroups'), supabaseRepository.list('churchLocations'), supabaseRepository.list('programmes'), supabaseRepository.list('conventionRoles'), supabaseRepository.getSettings(),
+        ]);
+        if (!active) return;
+        const currentEvent = events.find(event => event.active);
+        if (currentEvent) setCurrentEventId(currentEvent.id);
+        setMembers(remoteMembers); setExecutives(remoteExecutives); setAttendance(remoteAttendance); setAdminActivities(remoteActivities); setGeneratedLinks(remoteLinks);
+        setBands(remoteBands); setDepartments(remoteDepartments); setChurchGroups(remoteGroups); setChurchLocations(remoteLocations); setProgrammes(remoteProgrammes); setConventionRoles(remoteRoles);
+        if (settings) setConventionSettings(settings);
+      } catch (error) { console.error('Unable to load convention data from Supabase.', error); }
+    };
+    void load();
+    return () => { active = false; };
+  }, [supabaseRepository]);
+
+  useEffect(() => {
+    if (useSupabase) return;
     const unsubscribe = localStorageRepository.subscribe(() => {
     setBands(localStorageRepository.list('bands'));
     setDepartments(localStorageRepository.list('departments'));
@@ -290,47 +312,52 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setConventionRoles(localStorageRepository.list('conventionRoles'));
     });
     return () => { unsubscribe(); };
-  }, []);
+  }, [useSupabase]);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.replace('members', members);
     } catch (error) {
       console.warn('Unable to persist members locally.', error);
     }
-  }, [members]);
+  }, [members, useSupabase]);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.replace('executives', executives);
     } catch (error) {
       console.warn('Unable to persist executives locally.', error);
     }
-  }, [executives]);
+  }, [executives, useSupabase]);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.replace('attendance', attendance);
     } catch (error) {
       console.warn('Unable to persist attendance locally.', error);
     }
-  }, [attendance]);
+  }, [attendance, useSupabase]);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.replace('biometricLogs', biometricLogs);
     } catch (error) {
       console.warn('Unable to persist biometric logs locally.', error);
     }
-  }, [biometricLogs]);
+  }, [biometricLogs, useSupabase]);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.replace('adminActivities', adminActivities);
     } catch (error) {
       console.warn('Unable to persist admin activities locally.', error);
     }
-  }, [adminActivities]);
+  }, [adminActivities, useSupabase]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -344,28 +371,31 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.replace('firstTimers', firstTimers);
     } catch (error) {
       console.warn('Unable to persist first timers locally.', error);
     }
-  }, [firstTimers]);
+  }, [firstTimers, useSupabase]);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.replace('generatedLinks', generatedLinks);
     } catch (error) {
       console.warn('Unable to persist generated links locally.', error);
     }
-  }, [generatedLinks]);
+  }, [generatedLinks, useSupabase]);
 
   useEffect(() => {
+    if (useSupabase) return;
     try {
       localStorageRepository.setSettings(conventionSettings);
     } catch (error) {
       console.warn('Unable to persist convention settings locally.', error);
     }
-  }, [conventionSettings]);
+  }, [conventionSettings, useSupabase]);
 
   const generateMemberId = useCallback(() => {
     const highest = members.reduce((max, member) => {
@@ -594,11 +624,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
   }, []);
 
-  const resetDemoData = useCallback(() => {
-    localStorageRepository.reset();
-    window.location.reload();
-  }, []);
-
   const addListActivity = useCallback((actorEmail: string, actorName: string, target: string) => {
     setAdminActivities(prev => [{ id: crypto.randomUUID(), eventId: currentEventId, actorEmail, actorName, action: 'role' as const, target, createdAt: new Date().toISOString() }, ...prev].slice(0, 80));
   }, [currentEventId]);
@@ -669,7 +694,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addMember, addExecutive, addAttendance, verifyMemberBiometric, claimAccessItem, promoteExecutiveToAdmin, revokeExecutiveAdmin, addFirstTimer,
       updateConventionSettings, assignExecutiveRole, addGeneratedLink, validateGeneratedLink, recordGeneratedLinkUse,
       deleteMember, deleteExecutive, updateMember,
-      generateMemberId, assignConventionGroup, resetDemoData, saveListItem, deleteListItem, saveProgramme, deleteProgramme, assignConventionRole, revokeConventionRole,
+      generateMemberId, assignConventionGroup, saveListItem, deleteListItem, saveProgramme, deleteProgramme, assignConventionRole, revokeConventionRole,
     }}>
       {children}
     </AppDataContext.Provider>

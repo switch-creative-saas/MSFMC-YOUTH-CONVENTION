@@ -10,14 +10,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 
 const DEV_LOGIN_OPTIONS: DevQuickLoginOption[] = [
-  { label: 'Super Admin', email: 'superadmin@mosyf.org', password: 'admin123' },
-  { label: 'Executive', email: 'executive@mosyf.org', password: 'exec123' },
-];
+  { label: 'Super Admin', email: import.meta.env.VITE_DEV_SUPER_ADMIN_EMAIL ?? '', password: import.meta.env.VITE_DEV_SUPER_ADMIN_PASSWORD ?? '' },
+  { label: 'Executive', email: import.meta.env.VITE_DEV_EXECUTIVE_EMAIL ?? '', password: import.meta.env.VITE_DEV_EXECUTIVE_PASSWORD ?? '' },
+].filter(option => option.email && option.password);
 
 function dashboardPath(role?: string) {
   if (role === 'super_admin' || role === 'admin') return '/admin/dashboard';
   if (role === 'executive') return '/executive/dashboard';
-  if (role === 'member') return '/member/home';
   return '/login';
 }
 
@@ -70,7 +69,7 @@ export function LoginPage() {
           <button type="button" onClick={() => setForgotOpen(true)} className="portal-focus text-left text-sm font-medium text-portal-ink">Forgot password?</button>
           <motion.button type="submit" disabled={loading || success} className="group flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-portal-dark px-5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-75 dark:bg-portal-accent dark:text-portal-accent-ink" whileHover={{ y: -1 }} whileTap={{ scale: 0.985 }}>{loading ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/25 border-t-white dark:border-portal-ink/25 dark:border-t-portal-ink" /> : success ? 'Welcome back' : <>Sign In <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /></>}</motion.button>
         </form>
-        <DevQuickLogin visible={import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_LOGIN === 'true'} options={DEV_LOGIN_OPTIONS} disabled={loading || success} activeEmail={email} onSelect={handleDevLogin} />
+        <DevQuickLogin visible={import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEV_LOGIN === 'true'} options={DEV_LOGIN_OPTIONS} disabled={loading || success} activeEmail={email} onSelect={handleDevLogin} />
         <p className="mt-7 text-center text-xs text-portal-label">Have a registration link? <Link to="/register/member" className="font-semibold text-portal-ink underline underline-offset-4">Register now</Link></p>
       </motion.div>
     </section>

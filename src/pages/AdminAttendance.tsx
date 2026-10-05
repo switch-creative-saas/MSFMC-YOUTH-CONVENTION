@@ -17,11 +17,11 @@ import {
 } from 'lucide-react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { useAppData } from '@/contexts/AppDataContext';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import type { AccessItemType, Member } from '@/types';
 import { PortalInput } from '@/components/ui-kit/FormControls';
 import { usePermission } from '@/hooks/usePermission';
+import { claimResource, recordCheckIn, recordParticipation } from '@/lib/supabase/operations';
 
 const ACCESS_ITEMS: Array<{ id: AccessItemType; label: string; icon: typeof Utensils }> = [
   { id: 'entry', label: 'Convention Entry', icon: DoorOpen },
@@ -43,10 +43,9 @@ export function AdminAttendance() {
     attendance,
     biometricLogs,
     biometricDevices,
-    verifyMemberBiometric,
-    claimAccessItem,
+    currentEventId,
+    programmes,
   } = useAppData();
-  const { user } = useAuth();
   const { addToast } = useToast();
   const canVerify = usePermission('verify');
   const canClaimFood = usePermission('claim_food');
@@ -56,9 +55,8 @@ export function AdminAttendance() {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<'success' | 'duplicate' | null>(null);
+  const [distributionSlot, setDistributionSlot] = useState('default');
 
-  const actorEmail = user?.email ?? 'admin@mosyf.org';
-  const actorName = user?.name ?? 'Admin';
   const onlineDevice = biometricDevices.find(device => device.status === 'online');
 
   const searchResults = search.length > 1
@@ -102,28 +100,38 @@ export function AdminAttendance() {
     setScanning(true);
     setScanResult(null);
     await new Promise(resolve => setTimeout(resolve, 1800));
-    const result = verifyMemberBiometric(selectedMember.id, actorEmail, actorName);
-    setScanning(false);
-    setScanResult(result.duplicate ? 'duplicate' : result.ok ? 'success' : null);
-
-    const latest = members.find(member => member.id === selectedMember.id);
-    setSelectedMember(latest ? { ...latest, biometricStatus: result.duplicate ? 'duplicate_attempt' : 'verified_checked_in' } : selectedMember);
-    addToast({ type: result.ok ? 'success' : 'warning', title: result.message });
+    try {
+      const result = await recordCheckIn({ eventId: currentEventId, memberId: selectedMember.id, device: onlineDevice.id });
+      setScanResult(result.status === 'already_checked_in' ? 'duplicate' : 'success');
+      setSelectedMember(current => current ? { ...current, biometricStatus: result.status === 'already_checked_in' ? 'duplicate_attempt' : 'verified_checked_in' } : current);
+      addToast({ type: result.status === 'already_checked_in' ? 'warning' : 'success', title: result.status === 'already_checked_in' ? 'Attendance has already been recorded today.' : 'Attendance recorded.' });
+    } catch (error) {
+      addToast({ type: 'error', title: error instanceof Error ? error.message : 'Attendance could not be recorded.' });
+    } finally {
+      setScanning(false);
+    }
   };
 
-  const handleAccessClaim = (item: AccessItemType) => {
+  const handleAccessClaim = async (item: AccessItemType) => {
     const allowed = item === 'food' ? canClaimFood : item === 'souvenir' ? canClaimSouvenir : item === 'activity' ? canRecordActivity : canVerify;
     if (!allowed) {
       addToast({ type: 'warning', title: 'You do not have permission for this action.' });
       return;
     }
     if (!selectedMember) return;
-    const result = claimAccessItem(selectedMember.id, item, actorEmail, actorName);
-    addToast({ type: result.ok ? 'success' : 'warning', title: result.message });
-    setSelectedMember(prev => prev ? {
-      ...prev,
-      accessClaims: result.ok ? { ...(prev.accessClaims ?? {}), [item]: new Date().toISOString() } : prev.accessClaims,
-    } : prev);
+    try {
+      if (item === 'activity') {
+        const activity = programmes.find(programme => programme.active);
+        if (!activity) throw new Error('Create an active programme before recording participation.');
+        await recordParticipation({ eventId: currentEventId, memberId: selectedMember.id, activityId: activity.id });
+      } else {
+        await claimResource({ eventId: currentEventId, memberId: selectedMember.id, resource: item, slot: distributionSlot });
+      }
+      addToast({ type: 'success', title: item === 'activity' ? 'Participation recorded.' : `${item.charAt(0).toUpperCase() + item.slice(1)} claim recorded.` });
+      setSelectedMember(prev => prev ? { ...prev, accessClaims: { ...(prev.accessClaims ?? {}), [item]: new Date().toISOString() } } : prev);
+    } catch (error) {
+      addToast({ type: 'warning', title: error instanceof Error ? error.message : 'The claim could not be recorded.' });
+    }
   };
 
   return (
@@ -274,6 +282,12 @@ export function AdminAttendance() {
 
                   <div className="mt-6">
                     <h4 className="text-sm font-semibold text-portal-ink dark:text-white mb-3">Access Control</h4>
+                    <label className="mb-3 block text-xs font-medium text-portal-label">
+                      Distribution slot
+                      <select value={distributionSlot} onChange={event => setDistributionSlot(event.target.value)} className="mt-1 block h-10 w-full rounded-xl border border-portal-line bg-portal-surface px-3 text-sm text-portal-ink dark:border-white/10">
+                        <option value="default">Default distribution</option>
+                      </select>
+                    </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {ACCESS_ITEMS.map(item => {
                         const claimed = Boolean(selectedMember.accessClaims?.[item.id]);

@@ -8,6 +8,7 @@ import { useToast } from '@/contexts/ToastContext';
 import type { FellowshipBand, ConventionGroup } from '@/types';
 import { PortalInput, PortalSelect } from '@/components/ui-kit/FormControls';
 import { DataTable } from '@/components/ui-kit/DataTable';
+import { supabase } from '@/lib/supabase/client';
 
 const biometricBadge = (status?: string) => {
   if (status === 'verified_checked_in') return { className: 'status-badge-green', label: 'Biometric Verified' };
@@ -17,7 +18,7 @@ const biometricBadge = (status?: string) => {
 };
 
 export function AdminRegistrations() {
-  const { members, generatedLinks, bands, churchGroups, addGeneratedLink, deleteMember } = useAppData();
+  const { currentEventId, members, generatedLinks, bands, churchGroups, deleteMember } = useAppData();
   const { addToast } = useToast();
   const [search, setSearch] = useState('');
   const [bandFilter, setBandFilter] = useState<FellowshipBand | 'All'>('All');
@@ -38,11 +39,15 @@ export function AdminRegistrations() {
   const paginatedMembers = filteredMembers.slice(memberPage * PAGE_SIZE, (memberPage + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(filteredMembers.length / PAGE_SIZE);
 
-  const generateLink = (type: 'member' | 'executive') => {
-    const token = Math.random().toString(36).substring(2, 15);
+  const generateLink = async (type: 'member' | 'executive') => {
+    const { data, error } = await (supabase as any).from('registration_links').insert({ event_id: currentEventId, kind: type }).select('token').single();
+    if (error || !data?.token) {
+      addToast({ type: 'error', title: 'Link could not be generated', description: error?.message ?? 'Please try again.' });
+      return;
+    }
+    const token = String(data.token);
     const basePath = `${window.location.origin}${window.location.pathname}`;
-    const url = `${basePath}#/register/${type}?token=${token}`;
-    addGeneratedLink({ type, url, token, uses: 0, status: 'active' });
+    const url = `${basePath}#/register/${type}?token=${encodeURIComponent(token)}`;
     navigator.clipboard.writeText(url);
     addToast({ type: 'success', title: `${type === 'member' ? 'Member' : 'Executive'} link generated and copied!` });
   };

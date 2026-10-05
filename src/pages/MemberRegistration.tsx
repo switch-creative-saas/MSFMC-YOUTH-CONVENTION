@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -18,7 +18,7 @@ import youthLogo from '@/assets/youth-logo.png';
 import { ConventionTag } from '@/components/ConventionTag';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/contexts/ToastContext';
-import { sendRegistrationConfirmation } from '@/lib/registrationEmail';
+import { submitRegistration } from '@/lib/supabase/registration';
 import { bandColors as BAND_COLORS } from '@/components/ui-kit/palette';
 import type { Department, FellowshipBand, Member } from '@/types';
 
@@ -40,6 +40,7 @@ type FormState = {
   departments: Department[];
   isFirstTimer: boolean | null;
   wantsPermanentMembership: boolean | null;
+  guardianConsent: boolean;
 };
 
 const initialForm: FormState = {
@@ -57,6 +58,7 @@ const initialForm: FormState = {
   departments: [],
   isFirstTimer: null,
   wantsPermanentMembership: null,
+  guardianConsent: false,
 };
 
 function formatRegistrationDate(value: string) {
@@ -329,16 +331,14 @@ async function createTagImage(member: Member) {
 export function MemberRegistration() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { addMember, members, bands, departments, churchLocations, validateGeneratedLink, recordGeneratedLinkUse, getStatusUrl } = useAppData();
+  const { members, bands, departments, churchLocations } = useAppData();
   const { addToast } = useToast();
   const token = new URLSearchParams(location.search).get('token');
-  const registrationLink = validateGeneratedLink('member', token);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [registeredMember, setRegisteredMember] = useState<Member | null>(null);
-  const [emailingMemberId, setEmailingMemberId] = useState('');
   const tagRef = useRef<HTMLDivElement>(null);
 
   const normalizedEmail = form.email.trim().toLowerCase();
@@ -424,6 +424,8 @@ export function MemberRegistration() {
       if (form.isFirstTimer && form.wantsPermanentMembership === null) {
         nextErrors.wantsPermanentMembership = 'Select a permanent membership response.';
       }
+      const age = form.dateOfBirth ? Math.floor((Date.now() - new Date(form.dateOfBirth).getTime()) / 31557600000) : 18;
+      if (age < 18 && !form.guardianConsent) nextErrors.guardianConsent = 'Guardian consent is required for attendees under 18.';
     }
 
     setErrors(nextErrors);
@@ -437,7 +439,7 @@ export function MemberRegistration() {
   const previous = () => setStep(current => Math.max(current - 1, 0));
 
   const submit = async () => {
-    if (!registrationLink) {
+    if (!token) {
       addToast({ type: 'error', title: 'Invalid registration link', description: "This registration link isn't valid." });
       return;
     }
@@ -446,28 +448,21 @@ export function MemberRegistration() {
     setSubmitting(true);
 
     try {
-      const member = addMember({
-        fullName: form.fullName.trim(),
-        phoneNumber: form.phoneNumber.trim(),
-        email: normalizedEmail,
-        gender: form.gender as 'Male' | 'Female',
-        dateOfBirth: form.dateOfBirth,
-        address: form.address.trim(),
-        occupation: form.occupation.trim(),
-        emergencyContact: form.emergencyContact.trim(),
-        churchBranch: form.churchBranch,
-        profilePhoto: form.profilePhoto,
-        fellowshipBand: form.fellowshipBand as FellowshipBand,
-        departments: form.departments.length ? form.departments : ['None'],
-        isFirstTimer: form.isFirstTimer === true,
-        wantsPermanentMembership: form.isFirstTimer ? form.wantsPermanentMembership : null,
+      const band = bands.find(item => item.name === form.fellowshipBand);
+      const churchLocation = churchLocations.find(item => item.name === form.churchBranch);
+      const response = await submitRegistration(token, {
+        id: crypto.randomUUID(), full_name: form.fullName.trim(), phone: form.phoneNumber.trim(), email: normalizedEmail,
+        gender: form.gender.toLowerCase(), date_of_birth: form.dateOfBirth, address: form.address.trim(), occupation: form.occupation.trim(),
+        emergency_contact: form.emergencyContact.trim(), photo_path: form.profilePhoto, band_id: band?.id ?? '', church_location_id: churchLocation?.id ?? '',
+        department_ids: departments.filter(item => form.departments.includes(item.name as Department)).map(item => item.id),
+        is_first_timer: form.isFirstTimer === true, wants_permanent: form.isFirstTimer ? form.wantsPermanentMembership === true : false,
+        consent: true, guardian_consent: form.guardianConsent, client_created_at: new Date().toISOString(),
       });
+      const member: Member = { id: response.member_id, statusToken: response.status_token, fullName: form.fullName.trim(), phoneNumber: form.phoneNumber.trim(), email: normalizedEmail, gender: form.gender as 'Male' | 'Female', dateOfBirth: form.dateOfBirth, address: form.address.trim(), occupation: form.occupation.trim(), emergencyContact: form.emergencyContact.trim(), churchBranch: form.churchBranch, profilePhoto: form.profilePhoto, fellowshipBand: form.fellowshipBand as FellowshipBand, departments: form.departments.length ? form.departments : ['None'], isFirstTimer: form.isFirstTimer === true, wantsPermanentMembership: form.isFirstTimer ? form.wantsPermanentMembership : null, conventionGroup: `Group ${response.convention_group}` as Member['conventionGroup'], registeredAt: new Date().toISOString(), qrCode: response.member_code };
 
       setRegisteredMember(member);
-      recordGeneratedLinkUse(registrationLink.id);
-      setEmailingMemberId(member.id);
       setStep(3);
-      addToast({ type: 'success', title: 'Registration complete', description: `${member.id} has been generated. Preparing confirmation email...` });
+      addToast({ type: 'success', title: 'Registration complete', description: `${response.member_code} has been generated.` });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Registration failed.';
       setErrors({ email: message });
@@ -496,73 +491,13 @@ export function MemberRegistration() {
     }
   };
 
-  useEffect(() => {
-    if (!registeredMember || emailingMemberId !== registeredMember.id) return;
-
-    let cancelled = false;
-
-    const sendEmail = async () => {
-      try {
-        await new Promise(resolve => window.requestAnimationFrame(resolve));
-        const imageUrl = await createTagImage(registeredMember);
-        if (cancelled) return;
-
-        await sendRegistrationConfirmation({
-          type: 'member',
-          to: registeredMember.email,
-          subject: 'Your MOSYF Convention Registration is Confirmed',
-          statusUrl: getStatusUrl(registeredMember),
-          tagUrl: getStatusUrl(registeredMember),
-          member: {
-            id: registeredMember.id,
-            fullName: registeredMember.fullName,
-            email: registeredMember.email,
-            phoneNumber: registeredMember.phoneNumber,
-            fellowshipBand: registeredMember.fellowshipBand,
-            conventionGroup: registeredMember.conventionGroup,
-            departments: registeredMember.departments,
-            registeredAt: registeredMember.registeredAt,
-          },
-          attachment: {
-            filename: `${registeredMember.id}-convention-tag.png`,
-            contentType: 'image/png',
-            dataUrl: imageUrl,
-          },
-        });
-        if (!cancelled) {
-          setEmailingMemberId('');
-          addToast({
-            type: 'success',
-            title: 'Confirmation email sent',
-            description: `The convention tag was sent to ${registeredMember.email}.`,
-          });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setEmailingMemberId('');
-          addToast({
-            type: 'warning',
-            title: 'Email not sent automatically',
-            description: error instanceof Error ? error.message : 'Unable to send confirmation email.',
-            duration: 7000,
-          });
-        }
-      }
-    };
-
-    void sendEmail();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [addToast, emailingMemberId, registeredMember]);
 
   const printTag = () => window.print();
 
   const inputClass = (field: keyof FormState) =>
     `glass-input w-full ${errors[field] ? 'border-red-500 ring-[3px] ring-red-500/15' : ''}`;
 
-  if (!registrationLink) {
+  if (!token) {
     return (
       <main className="min-h-screen portal-theme portal-canvas">
         <AuthHeader eyebrow="Member Onboarding" homeHref="/convention/status" hireDeveloperHref="/convention/hire" />
@@ -750,6 +685,11 @@ export function MemberRegistration() {
                       </motion.div>
                     )}
                   </AnimatePresence>
+                  <label className="mt-6 flex items-start gap-3 rounded-2xl border border-portal-line bg-portal-surface p-4 text-sm text-portal-ink">
+                    <input type="checkbox" checked={form.guardianConsent} onChange={event => update('guardianConsent', event.target.checked)} className="mt-0.5 h-4 w-4" />
+                    <span>I confirm that the registration details are accurate and that I have the required consent to register.</span>
+                  </label>
+                  {errors.guardianConsent && <ErrorText>{errors.guardianConsent}</ErrorText>}
                 </motion.div>
               )}
 

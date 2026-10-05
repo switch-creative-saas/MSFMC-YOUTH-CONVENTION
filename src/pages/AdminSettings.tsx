@@ -60,7 +60,7 @@ function ManagedList({ title, items, onSave, onDelete }: {
 }
 
 export function AdminSettings() {
-  const { conventionSettings, updateConventionSettings, resetDemoData, programmes, saveProgramme, deleteProgramme, bands, departments, churchGroups, churchLocations, saveListItem, deleteListItem } = useAppData();
+  const { conventionSettings, updateConventionSettings, programmes, saveProgramme, deleteProgramme, bands, departments, churchGroups, churchLocations, saveListItem, deleteListItem } = useAppData();
   const { user } = useAuth();
   const { addToast } = useToast();
   const [settings, setSettings] = useState({ ...conventionSettings });
@@ -162,7 +162,6 @@ export function AdminSettings() {
           {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
           Save Changes
         </PillButton>
-        {user?.role === 'super_admin' && <PillButton variant="outline" className="mt-6 ml-3" onClick={resetDemoData}>Reset demo data</PillButton>}
       </motion.div>
 
       {/* Sessions Manager */}
