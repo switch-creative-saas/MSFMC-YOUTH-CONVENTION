@@ -166,22 +166,7 @@ const MOCK_FIRST_TIMERS: FirstTimer[] = MOCK_MEMBERS.filter(m => m.isFirstTimer)
 }));
 
 const DEFAULT_SETTINGS: ConventionSettings = {
-  name: "Mountain of Solution Youth Fellowship Convention 2026",
-  startDate: "2026-10-22",
-  endDate: "2026-10-25",
-  location: "Mountain of Solution Headquarters, Lagos",
-  theme: "Walk With Me",
-  scripture: "Micah 6:8",
-  isActive: true,
-  maxAttendees: 500,
-  sessions: [
-    { id: "s1", name: "Opening Ceremony", date: "2026-08-15", startTime: "09:00", endTime: "12:00", venue: "Main Auditorium" },
-    { id: "s2", name: "Youth Worship Night", date: "2026-08-15", startTime: "18:00", endTime: "21:00", venue: "Main Auditorium" },
-    { id: "s3", name: "Leadership Workshop", date: "2026-08-16", startTime: "09:00", endTime: "12:00", venue: "Conference Hall A" },
-    { id: "s4", name: "Sports & Games", date: "2026-08-16", startTime: "14:00", endTime: "17:00", venue: "Sports Complex" },
-    { id: "s5", name: "Gala Night", date: "2026-08-16", startTime: "19:00", endTime: "22:00", venue: "Banquet Hall" },
-    { id: "s6", name: "Closing Ceremony", date: "2026-08-17", startTime: "10:00", endTime: "13:00", venue: "Main Auditorium" },
-  ],
+  name: '', startDate: '', endDate: '', location: '', theme: '', scripture: '', isActive: false, maxAttendees: 0, sessions: [],
 };
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
@@ -203,24 +188,7 @@ const STORAGE_ENTITIES = {
   [GENERATED_LINKS_STORAGE_KEY]: 'generatedLinks',
 } as const;
 
-const DEFAULT_BIOMETRIC_DEVICES: BiometricDevice[] = [
-  {
-    id: 'bio-bridge-01',
-    name: 'Convention Biometric Bridge',
-    vendor: 'SDK Bridge',
-    connectionType: 'WebSocket Bridge',
-    status: 'online',
-    lastHeartbeat: new Date().toISOString(),
-  },
-  {
-    id: 'usb-fallback-01',
-    name: 'USB Scanner Adapter',
-    vendor: 'Digital Persona',
-    connectionType: 'USB',
-    status: 'connecting',
-    lastHeartbeat: new Date().toISOString(),
-  },
-];
+const DEFAULT_BIOMETRIC_DEVICES: BiometricDevice[] = [];
 
 function readStoredList<T>(key: string, fallback: T[]): T[] {
   const entity = STORAGE_ENTITIES[key as keyof typeof STORAGE_ENTITIES];
@@ -265,13 +233,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const useSupabase = dataBackend === 'supabase';
   const [supabaseRepository] = useState(() => useSupabase ? new SupabaseRepository() : null);
   const [currentEventId, setCurrentEventId] = useState(localStorageRepository.currentEventId);
-  const [members, setMembers] = useState<Member[]>(() => useSupabase ? [] : ensureMemberTokens(readStoredList<Member>(MEMBERS_STORAGE_KEY, MOCK_MEMBERS)));
-  const [executives, setExecutives] = useState<Executive[]>(() => useSupabase ? [] : ensureExecutiveTokens(readStoredList<Executive>(EXECUTIVES_STORAGE_KEY, MOCK_EXECUTIVES)));
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => useSupabase ? [] : readStoredList<AttendanceRecord>(ATTENDANCE_STORAGE_KEY, MOCK_ATTENDANCE));
+  const [members, setMembers] = useState<Member[]>(() => useSupabase ? [] : ensureMemberTokens(readStoredList<Member>(MEMBERS_STORAGE_KEY, [])));
+  const [executives, setExecutives] = useState<Executive[]>(() => useSupabase ? [] : ensureExecutiveTokens(readStoredList<Executive>(EXECUTIVES_STORAGE_KEY, [])));
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => useSupabase ? [] : readStoredList<AttendanceRecord>(ATTENDANCE_STORAGE_KEY, []));
   const [biometricLogs, setBiometricLogs] = useState<BiometricLog[]>(() => useSupabase ? [] : readStoredList<BiometricLog>(BIOMETRIC_LOGS_STORAGE_KEY, []));
   const [biometricDevices, setBiometricDevices] = useState<BiometricDevice[]>(DEFAULT_BIOMETRIC_DEVICES);
   const [adminActivities, setAdminActivities] = useState<AdminActivityLog[]>(() => useSupabase ? [] : readStoredList<AdminActivityLog>(ADMIN_ACTIVITIES_STORAGE_KEY, []));
-  const [firstTimers, setFirstTimers] = useState<FirstTimer[]>(() => useSupabase ? [] : readStoredList<FirstTimer>(FIRST_TIMERS_STORAGE_KEY, MOCK_FIRST_TIMERS));
+  const [firstTimers, setFirstTimers] = useState<FirstTimer[]>(() => useSupabase ? [] : readStoredList<FirstTimer>(FIRST_TIMERS_STORAGE_KEY, []));
   const [conventionSettings, setConventionSettings] = useState<ConventionSettings>(() => useSupabase ? { ...DEFAULT_SETTINGS, name: '', location: '', sessions: [] } : readStoredValue<ConventionSettings>(CONVENTION_SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS));
   const [generatedLinks, setGeneratedLinks] = useState<GeneratedLink[]>(() => useSupabase ? [] : readStoredList<GeneratedLink>(GENERATED_LINKS_STORAGE_KEY, []));
   const [bands, setBands] = useState<Band[]>(() => useSupabase ? [] : localStorageRepository.list('bands'));

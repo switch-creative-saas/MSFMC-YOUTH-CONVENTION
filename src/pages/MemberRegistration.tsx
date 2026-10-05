@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -18,7 +18,8 @@ import youthLogo from '@/assets/youth-logo.png';
 import { ConventionTag } from '@/components/ConventionTag';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useToast } from '@/contexts/ToastContext';
-import { submitRegistration } from '@/lib/supabase/registration';
+import { dataUrlToBlob, submitRegistration, uploadRegistrationAsset } from '@/lib/supabase/registration';
+import { toPng } from 'html-to-image';
 import { bandColors as BAND_COLORS } from '@/components/ui-kit/palette';
 import type { Department, FellowshipBand, Member } from '@/types';
 
@@ -339,6 +340,7 @@ export function MemberRegistration() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [registeredMember, setRegisteredMember] = useState<Member | null>(null);
+  const [uploadedMemberId, setUploadedMemberId] = useState('');
   const tagRef = useRef<HTMLDivElement>(null);
 
   const normalizedEmail = form.email.trim().toLowerCase();
@@ -493,6 +495,25 @@ export function MemberRegistration() {
 
 
   const printTag = () => window.print();
+
+  useEffect(() => {
+    if (!registeredMember || uploadedMemberId === registeredMember.id || !registeredMember.statusToken) return;
+    let cancelled = false;
+    const uploadAssets = async () => {
+      try {
+        if (form.profilePhoto) await uploadRegistrationAsset('photo', registeredMember.id, registeredMember.statusToken!, dataUrlToBlob(form.profilePhoto));
+        if (tagRef.current) {
+          const dataUrl = await toPng(tagRef.current, { cacheBust: true, pixelRatio: 2 });
+          await uploadRegistrationAsset('tag', registeredMember.id, registeredMember.statusToken!, dataUrlToBlob(dataUrl));
+        }
+        if (!cancelled) setUploadedMemberId(registeredMember.id);
+      } catch {
+        if (!cancelled) setUploadedMemberId(registeredMember.id);
+      }
+    };
+    void uploadAssets();
+    return () => { cancelled = true; };
+  }, [form.profilePhoto, registeredMember, uploadedMemberId]);
 
   const inputClass = (field: keyof FormState) =>
     `glass-input w-full ${errors[field] ? 'border-red-500 ring-[3px] ring-red-500/15' : ''}`;

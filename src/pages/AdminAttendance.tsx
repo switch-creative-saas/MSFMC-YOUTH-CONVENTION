@@ -137,12 +137,12 @@ export function AdminAttendance() {
   return (
     <AdminLayout
       pageTitle="Biometric Operations Control"
-      pageSubtitle="Demo mode interface for USB or network fingerprint SDKs through a local WebSocket bridge."
+      pageSubtitle="Connect a fingerprint scanner to begin secure convention check-in."
     >
       <div className="mb-6 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-end">
         <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-portal-line bg-portal-surface px-4 py-3 text-portal-ink">
           <Radio className="w-4 h-4 animate-pulse" />
-          <span className="truncate text-sm font-medium">Demo mode: no scanner connected</span>
+          <span className="truncate text-sm font-medium">No scanner connected</span>
         </div>
       </div>
 
@@ -151,7 +151,7 @@ export function AdminAttendance() {
           { label: 'Pending Verification', value: pendingMembers.length, icon: Fingerprint, tone: 'text-amber-500 bg-amber-500/10' },
           { label: 'Biometric Verified', value: verifiedMembers.length, icon: ShieldCheck, tone: 'text-portal-ink bg-portal-surface' },
           { label: 'Duplicate Alerts', value: duplicates.length, icon: AlertTriangle, tone: 'text-red-500 bg-red-500/10' },
-          { label: 'Demo Devices', value: biometricDevices.length, icon: Cpu, tone: 'text-portal-ink bg-portal-surface' },
+          { label: 'Connected Devices', value: biometricDevices.length, icon: Cpu, tone: 'text-portal-ink bg-portal-surface' },
         ].map((item, index) => (
           <motion.div
             key={item.label}
@@ -180,7 +180,7 @@ export function AdminAttendance() {
               <h3 className="font-display font-semibold text-lg text-portal-ink dark:text-white">Member Lookup</h3>
               <p className="text-xs text-portal-label mt-1">Search by name, member ID, QR code, or phone.</p>
             </div>
-            <span className="shrink-0 rounded-full border border-portal-line px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.04em] text-portal-label">Demo scanner</span>
+            <span className="shrink-0 rounded-full border border-portal-line px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.04em] text-portal-label">No scanner connected</span>
           </div>
 
           <div className="relative">
@@ -351,7 +351,7 @@ export function AdminAttendance() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <h3 className="font-display font-semibold text-lg text-portal-ink dark:text-white mb-4">Demo Verification Feed</h3>
+            <h3 className="font-display font-semibold text-lg text-portal-ink dark:text-white mb-4">Verification Feed</h3>
             <div className="space-y-3 max-h-[320px] overflow-y-auto scrollbar-thin">
               {(biometricLogs.length ? biometricLogs : [
                 { id: 'empty', status: 'failed' as const, message: 'Waiting for scanner activity', createdAt: new Date().toISOString(), scannerId: 'bio-bridge-01' },

@@ -26,6 +26,7 @@ create table events (
   venue text,
   description text,
   max_attendees int,
+  claim_slots jsonb not null default '[]'::jsonb,
   is_active boolean not null default false,
   created_at timestamptz not null default now(),
   check (end_date >= start_date)
@@ -582,13 +583,4 @@ grant execute on function get_status_by_token(text) to anon, authenticated;
 revoke execute on function next_counter(uuid, text) from public, anon, authenticated;
 revoke execute on function assign_group(uuid, uuid) from public, anon, authenticated;
 
--- ---------- seed (edit venue before the convention) ----------
-insert into events (slug, name, theme, scripture, start_date, end_date, venue, is_active)
-values ('mosyf-2026', 'Mountain of Solution Youth Fellowship Convention 2026', 'Walk With Me',
-        'Micah 6:8', '2026-10-22', '2026-10-25', 'TBD', true);
-insert into list_items (event_id, kind, name, sort_order)
-select e.id, 'band', b.n, b.o from events e,
-  (values ('Peniel',1),('Judah',2),('Zion',3),('Ephraim',4)) as b(n,o) where e.slug = 'mosyf-2026';
-insert into list_items (event_id, kind, name, sort_order)
-select e.id, 'department', d.n, d.o from events e,
-  (values ('Choir',1),('Usher',2),('Media',3),('Protocol',4),('Drama',5)) as d(n,o) where e.slug = 'mosyf-2026';
+-- Events and every managed list are created by the first-run admin setup.
