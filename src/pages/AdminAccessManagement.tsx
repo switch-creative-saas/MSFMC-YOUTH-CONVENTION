@@ -150,9 +150,8 @@ export function AdminAccessManagement() {
                         <select className="mt-2 min-h-9 w-full rounded-full border border-portal-line bg-transparent px-3 text-xs text-portal-ink" defaultValue="" onChange={event => {
                           const role = event.target.value as ConventionRoleName;
                           if (!role) return;
-                          assignConventionRole(exec.email, role, actorEmail, actorName);
                           event.currentTarget.value = '';
-                          addToast({ type: 'success', title: `${CONVENTION_ROLE_LABELS[role]} assigned to ${exec.fullName}` });
+                          void assignConventionRole(exec.email, role, actorEmail, actorName).then(() => addToast({ type: 'success', title: `${CONVENTION_ROLE_LABELS[role]} assigned to ${exec.fullName}` })).catch(error => addToast({ type: 'error', title: error instanceof Error ? error.message : 'Role could not be assigned.' }));
                         }}>
                           <option value="">Assign convention role</option>
                           {Object.entries(CONVENTION_ROLE_LABELS).map(([role, label]) => <option key={role} value={role}>{label}</option>)}
@@ -194,7 +193,7 @@ export function AdminAccessManagement() {
       <motion.section className="portal-card mt-6 p-4 sm:p-6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
         <h3 className="mb-4 font-display text-lg font-semibold text-portal-ink dark:text-white">Convention roles</h3>
         {conventionRoles.length === 0 ? <p className="text-sm text-portal-label">No convention-specific roles have been assigned.</p> : <div className="grid gap-3 md:grid-cols-2">
-          {conventionRoles.map(role => <div key={role.id} className="flex items-center justify-between gap-3 rounded-2xl border border-portal-line px-4 py-3"><div><p className="text-sm font-medium text-portal-ink dark:text-white">{CONVENTION_ROLE_LABELS[role.role]}</p><p className="text-xs text-portal-label">{role.userEmail}</p></div><button type="button" onClick={() => { revokeConventionRole(role.id, actorEmail, actorName); addToast({ type: 'success', title: 'Convention role revoked' }); }} className="rounded-full border border-portal-line px-3 py-1.5 text-xs text-portal-ink">Revoke</button></div>)}
+          {conventionRoles.map(role => <div key={role.id} className="flex items-center justify-between gap-3 rounded-2xl border border-portal-line px-4 py-3"><div><p className="text-sm font-medium text-portal-ink dark:text-white">{CONVENTION_ROLE_LABELS[role.role]}</p><p className="text-xs text-portal-label">{role.userEmail}</p></div><button type="button" onClick={() => void revokeConventionRole(role.id, actorEmail, actorName).then(() => addToast({ type: 'success', title: 'Convention role revoked' })).catch(error => addToast({ type: 'error', title: error instanceof Error ? error.message : 'Role could not be revoked.' }))} className="rounded-full border border-portal-line px-3 py-1.5 text-xs text-portal-ink">Revoke</button></div>)}
         </div>}
       </motion.section>
     </AdminLayout>

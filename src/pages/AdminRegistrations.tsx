@@ -72,10 +72,14 @@ export function AdminRegistrations() {
     setShowQRModal(true);
   };
 
-  const handleDelete = (id: string) => {
-    deleteMember(id);
-    setShowDeleteConfirm(null);
-    addToast({ type: 'success', title: 'Member deleted successfully' });
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteMember(id);
+      setShowDeleteConfirm(null);
+      addToast({ type: 'success', title: 'Member deleted successfully' });
+    } catch (error) {
+      addToast({ type: 'error', title: error instanceof Error ? error.message : 'Member could not be deleted.' });
+    }
   };
 
   const exportExcel = () => {

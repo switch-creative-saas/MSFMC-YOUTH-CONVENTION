@@ -22,7 +22,7 @@ const biometricStatusLabel = (status?: string) => {
 export function AdminDashboard() {
   const reducedMotion = useReducedMotion();
   const { user } = useAuth();
-  const { members, executives, attendance, adminActivities, conventionSettings, bands, addGeneratedLink, assignExecutiveRole } = useAppData();
+  const { members, executives, attendance, adminActivities, conventionSettings, bands, assignExecutiveRole } = useAppData();
   const { addToast } = useToast();
   const navigate = useNavigate();
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -41,7 +41,6 @@ export function AdminDashboard() {
     setLinkType(type);
     setShowLinkModal(true);
     setShowQR(false);
-    addGeneratedLink({ type, url, token, uses: 0, status: 'active' });
   };
 
   const copyLink = () => {

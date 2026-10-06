@@ -12,48 +12,55 @@ import { PortalInput, formLabelClass } from '@/components/ui-kit/FormControls';
 function ManagedList({ title, items, onSave, onDelete }: {
   title: string;
   items: ManagedListItem[];
-  onSave: (item: ManagedListItem) => void;
-  onDelete: (id: string) => void;
+  onSave: (item: ManagedListItem) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 }) {
+  const { addToast } = useToast();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const reportError = (cause: unknown, fallback: string) => {
+    const message = cause instanceof Error ? cause.message : fallback;
+    setError(message);
+    addToast({ type: 'error', title: message });
+  };
   const ordered = [...items].sort((a, b) => a.sortOrder - b.sortOrder);
-  const addItem = () => {
+  const addItem = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
     try {
-      onSave({ id: crypto.randomUUID(), name: trimmed, active: true, sortOrder: ordered.length });
+      setSaving(true);
+      await onSave({ id: crypto.randomUUID(), name: trimmed, active: true, sortOrder: ordered.length });
       setName('');
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to save item.');
-    }
+      reportError(cause, 'Unable to save item.');
+    } finally { setSaving(false); }
   };
-  const move = (index: number, direction: -1 | 1) => {
+  const move = async (index: number, direction: -1 | 1) => {
     const neighbour = ordered[index + direction];
     const item = ordered[index];
     if (!neighbour) return;
-    onSave({ ...item, sortOrder: neighbour.sortOrder });
-    onSave({ ...neighbour, sortOrder: item.sortOrder });
+    try { setSaving(true); await onSave({ ...item, sortOrder: neighbour.sortOrder }); await onSave({ ...neighbour, sortOrder: item.sortOrder }); } catch (cause) { reportError(cause, 'Unable to reorder items.'); } finally { setSaving(false); }
   };
 
   return <section className="rounded-3xl border border-portal-line bg-white/70 p-5 shadow-sm dark:bg-portal-surface">
     <div className="mb-4 flex items-center justify-between gap-3"><h3 className="text-base font-semibold text-portal-ink dark:text-white">{title}</h3><span className="text-xs text-portal-label">{ordered.length} items</span></div>
     <div className="mb-3 flex gap-2">
       <PortalInput value={name} onChange={event => setName(event.target.value)} placeholder={`Add ${title.toLowerCase().slice(0, -1)}`} />
-      <PillButton variant="outline" onClick={addItem} aria-label={`Add ${title}`}><Plus className="h-4 w-4" /></PillButton>
+      <PillButton variant="outline" onClick={() => void addItem()} disabled={saving} aria-label={`Add ${title}`}><Plus className="h-4 w-4" /></PillButton>
     </div>
     {error && <p className="mb-3 text-xs text-red-500">{error}</p>}
     <div className="space-y-2">
       {ordered.map((item, index) => <div key={item.id} className="flex items-center gap-2 rounded-2xl border border-portal-line px-3 py-2">
         <input className="min-w-0 flex-1 bg-transparent text-sm text-portal-ink outline-none dark:text-white" defaultValue={item.name} onBlur={event => {
           const nextName = event.target.value.trim();
-          if (nextName && nextName !== item.name) onSave({ ...item, name: nextName });
+          if (nextName && nextName !== item.name) void onSave({ ...item, name: nextName }).catch(cause => reportError(cause, 'Unable to save item.'));
         }} />
-        <button type="button" aria-label="Move up" disabled={index === 0} className="p-1 text-portal-label disabled:opacity-30" onClick={() => move(index, -1)}>↑</button>
-        <button type="button" aria-label="Move down" disabled={index === ordered.length - 1} className="p-1 text-portal-label disabled:opacity-30" onClick={() => move(index, 1)}>↓</button>
-        <button type="button" className="rounded-full border border-portal-line px-2 py-1 text-[11px] text-portal-label" onClick={() => onSave({ ...item, active: !item.active })}>{item.active ? 'Active' : 'Inactive'}</button>
-        <button type="button" aria-label={`Delete ${item.name}`} className="p-1 text-red-500" onClick={() => onDelete(item.id)}><Trash2 className="h-4 w-4" /></button>
+        <button type="button" aria-label="Move up" disabled={saving || index === 0} className="p-1 text-portal-label disabled:opacity-30" onClick={() => void move(index, -1)}>↑</button>
+        <button type="button" aria-label="Move down" disabled={saving || index === ordered.length - 1} className="p-1 text-portal-label disabled:opacity-30" onClick={() => void move(index, 1)}>↓</button>
+        <button type="button" disabled={saving} className="rounded-full border border-portal-line px-2 py-1 text-[11px] text-portal-label" onClick={() => void onSave({ ...item, active: !item.active }).catch(cause => reportError(cause, 'Unable to save item.'))}>{item.active ? 'Active' : 'Inactive'}</button>
+        <button type="button" aria-label={`Delete ${item.name}`} disabled={saving} className="p-1 text-red-500" onClick={() => void onDelete(item.id).catch(cause => reportError(cause, 'Unable to delete item.'))}><Trash2 className="h-4 w-4" /></button>
       </div>)}
     </div>
   </section>;
@@ -77,23 +84,23 @@ export function AdminSettings() {
     addToast({ type: 'success', title: 'Convention settings updated!' });
   };
 
-  const addSession = () => {
-    saveProgramme(sessionForm, user?.email ?? 'system', user?.name ?? 'System');
+  const addSession = async () => {
+    await saveProgramme(sessionForm, user?.email ?? 'system', user?.name ?? 'System');
     setShowSessionModal(false);
     setSessionForm({ title: '', description: '', date: '', startTime: '', endTime: '', location: '' });
     addToast({ type: 'success', title: 'Session added!' });
   };
 
-  const updateSession = () => {
+  const updateSession = async () => {
     if (!editingSession) return;
-    saveProgramme({ ...sessionForm, id: editingSession.id, sortOrder: editingSession.sortOrder, active: editingSession.active }, user?.email ?? 'system', user?.name ?? 'System');
+    await saveProgramme({ ...sessionForm, id: editingSession.id, sortOrder: editingSession.sortOrder, active: editingSession.active }, user?.email ?? 'system', user?.name ?? 'System');
     setEditingSession(null);
     setSessionForm({ title: '', description: '', date: '', startTime: '', endTime: '', location: '' });
     addToast({ type: 'success', title: 'Session updated!' });
   };
 
-  const deleteSession = (id: string) => {
-    deleteProgramme(id, user?.email ?? 'system', user?.name ?? 'System');
+  const deleteSession = async (id: string) => {
+    await deleteProgramme(id, user?.email ?? 'system', user?.name ?? 'System');
     addToast({ type: 'success', title: 'Session deleted!' });
   };
 
@@ -208,20 +215,20 @@ export function AdminSettings() {
       <motion.div className="mt-6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
         <h3 className="mb-4 text-lg font-semibold text-portal-ink dark:text-white">Lists</h3>
         <div className="grid gap-5 lg:grid-cols-2">
-        <ManagedList title="Bands" items={bands} onSave={item => saveListItem('bands', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={id => {
-          const result = deleteListItem('bands', id, user?.email ?? 'system', user?.name ?? 'System');
+        <ManagedList title="Bands" items={bands} onSave={item => saveListItem('bands', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={async id => {
+          const result = await deleteListItem('bands', id, user?.email ?? 'system', user?.name ?? 'System');
           if (result.message) addToast({ type: 'info', title: result.message });
         }} />
-        <ManagedList title="Departments" items={departments} onSave={item => saveListItem('departments', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={id => {
-          const result = deleteListItem('departments', id, user?.email ?? 'system', user?.name ?? 'System');
+        <ManagedList title="Departments" items={departments} onSave={item => saveListItem('departments', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={async id => {
+          const result = await deleteListItem('departments', id, user?.email ?? 'system', user?.name ?? 'System');
           if (result.message) addToast({ type: 'info', title: result.message });
         }} />
-        <ManagedList title="Groups" items={churchGroups} onSave={item => saveListItem('churchGroups', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={id => {
-          const result = deleteListItem('churchGroups', id, user?.email ?? 'system', user?.name ?? 'System');
+        <ManagedList title="Groups" items={churchGroups} onSave={item => saveListItem('churchGroups', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={async id => {
+          const result = await deleteListItem('churchGroups', id, user?.email ?? 'system', user?.name ?? 'System');
           if (result.message) addToast({ type: 'info', title: result.message });
         }} />
-        <ManagedList title="Locations" items={churchLocations} onSave={item => saveListItem('churchLocations', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={id => {
-          const result = deleteListItem('churchLocations', id, user?.email ?? 'system', user?.name ?? 'System');
+        <ManagedList title="Locations" items={churchLocations} onSave={item => saveListItem('churchLocations', item, user?.email ?? 'system', user?.name ?? 'System')} onDelete={async id => {
+          const result = await deleteListItem('churchLocations', id, user?.email ?? 'system', user?.name ?? 'System');
           if (result.message) addToast({ type: 'info', title: result.message });
         }} />
         </div>

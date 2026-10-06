@@ -1,5 +1,5 @@
 import type { ConventionSettings, RecordMetadata } from '@/types';
-import { DEFAULT_EVENT, DEFAULT_EVENT_ID, type DataRepository, type RepositoryEntity, type RepositoryRecordMap } from './DataRepository';
+import { DEFAULT_EVENT_ID, type DataRepository, type RepositoryEntity, type RepositoryRecordMap } from './DataRepository';
 
 const VERSION_KEY = 'mosyf_repository_version';
 const CURRENT_EVENT_KEY = 'mosyf_current_event_id';
@@ -17,13 +17,6 @@ function uuid() {
   return globalThis.crypto?.randomUUID?.() ?? ('rec-' + Date.now() + '-' + Math.random().toString(36).slice(2));
 }
 function now() { return new Date().toISOString(); }
-const LIST_SEEDS = {
-  bands: ['Peniel', 'Judah', 'Zion', 'Ephraim'],
-  departments: ['Choir', 'Ushering', 'Media', 'Protocol', 'Drama', 'Prayer', 'Technical', 'Dance', 'Evangelism', 'Welfare', 'Decoration', 'Security', 'Sanitation'],
-  churchGroups: ['Group A', 'Group B', 'Group C', 'Group D', 'Group E'],
-  churchLocations: ['Main Branch', 'Satellite Branch 1', 'Satellite Branch 2', 'Online Fellowship'],
-} as const;
-
 export class LocalStorageRepository implements DataRepository {
   readonly currentEventId: string;
   private readonly listeners = new Set<() => void>();
@@ -77,34 +70,11 @@ export class LocalStorageRepository implements DataRepository {
         const records = this.read(entity).map(record => this.withMetadata(record));
         if (records.length) window.localStorage.setItem(KEYS[entity], JSON.stringify(records));
       });
-      if (!this.read('events').some(event => event.id === DEFAULT_EVENT_ID)) this.persist('events', [this.withMetadata(DEFAULT_EVENT)]);
       const settings = this.getSettings();
       if (settings) this.setSettings(settings);
       window.localStorage.setItem(VERSION_KEY, String(VERSION));
     }
-    if (version < 2) {
-      (Object.entries(LIST_SEEDS) as Array<[keyof typeof LIST_SEEDS, readonly string[]]>).forEach(([entity, names]) => {
-        if (this.read(entity).length) return;
-        this.persist(entity, names.map((name, sortOrder) => this.withMetadata({ id: uuid(), name, active: true, sortOrder })));
-      });
-      window.localStorage.setItem(VERSION_KEY, String(VERSION));
-    }
-    if (version < 3 && !this.read('programmes').length) {
-      const settings = this.getSettings();
-      const programmes = (settings?.sessions ?? []).map((session, sortOrder) => this.withMetadata({
-        id: session.id,
-        title: session.name,
-        description: '',
-        date: session.date,
-        startTime: session.startTime,
-        endTime: session.endTime,
-        location: session.venue,
-        active: true,
-        sortOrder,
-      }));
-      if (programmes.length) this.persist('programmes', programmes);
-      window.localStorage.setItem(VERSION_KEY, String(VERSION));
-    }
+    if (version < VERSION) window.localStorage.setItem(VERSION_KEY, String(VERSION));
   }
   private emit() { this.listeners.forEach(listener => listener()); }
 }

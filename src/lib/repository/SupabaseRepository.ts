@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import type { AdminActivityLog, AttendanceRecord, ConventionEvent, ConventionRole, ConventionSettings, Executive, GeneratedLink, Member, Programme } from '@/types';
+import type { AdminActivityLog, AttendanceRecord, ConventionEvent, ConventionRole, ConventionRoleName, ConventionSettings, Executive, GeneratedLink, ManagedListItem, Member, Programme } from '@/types';
 import { supabase } from '@/lib/supabase/client';
 import { DEFAULT_EVENT_ID, type AsyncDataRepository, type RepositoryEntity, type RepositoryRecordMap } from './DataRepository';
 
@@ -54,9 +53,14 @@ export class SupabaseRepository implements AsyncDataRepository {
       return (data ?? []).map((row: Row): AttendanceRecord => ({ id: String(row.id), eventId: String(row.event_id), memberId: String(row.member_id), memberName: '', checkInTime: iso(row.checked_in_at), verificationMethod: row.method === 'qr' ? 'qr_code' : row.method === 'member_id' ? 'manual' : row.method as AttendanceRecord['verificationMethod'], status: 'present', sessionName: 'Convention', createdAt: iso(row.checked_in_at), updatedAt: iso(row.checked_in_at), createdBy: String(row.operator_id ?? 'database') })) as RepositoryRecordMap[K][];
     }
     if (entity === 'conventionRoles') {
-      const { data, error } = await db.from('convention_roles').select('*').eq('event_id', activeEvent);
+      const [{ data, error }, { data: profiles, error: profilesError }] = await Promise.all([
+        db.from('convention_roles').select('*').eq('event_id', activeEvent),
+        db.from('profiles').select('user_id,email'),
+      ]);
       if (error) throw error;
-      return (data ?? []).map((row: Row): ConventionRole => ({ id: String(row.id), eventId: String(row.event_id), userEmail: '', role: row.role as ConventionRole['role'], assignedBy: String(row.assigned_by ?? ''), assignedAt: iso(row.assigned_at), createdAt: iso(row.assigned_at), updatedAt: iso(row.assigned_at), createdBy: String(row.assigned_by ?? 'database') })) as RepositoryRecordMap[K][];
+      if (profilesError) throw profilesError;
+      const emails = new Map<string, string>((profiles ?? []).map((profile: Row) => [String(profile.user_id), String(profile.email ?? '')]));
+      return (data ?? []).map((row: Row): ConventionRole => ({ id: String(row.id), eventId: String(row.event_id), userEmail: emails.get(String(row.user_id)) ?? '', role: row.role as ConventionRole['role'], assignedBy: String(row.assigned_by ?? ''), assignedAt: iso(row.assigned_at), createdAt: iso(row.assigned_at), updatedAt: iso(row.assigned_at), createdBy: String(row.assigned_by ?? 'database') })) as RepositoryRecordMap[K][];
     }
     if (entity === 'adminActivities') {
       const { data, error } = await db.from('audit_log').select('*').eq('event_id', activeEvent).order('created_at', { ascending: false });
@@ -101,6 +105,104 @@ export class SupabaseRepository implements AsyncDataRepository {
     return settings;
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+
+  async saveListItem(entity: keyof typeof listKind, item: ManagedListItem) {
+    await this.ready;
+    const { data, error } = await (supabase as any).from('list_items').upsert({
+      id: item.id,
+      event_id: this.currentEventId,
+      kind: listKind[entity],
+      name: item.name.trim(),
+      is_active: item.active,
+      sort_order: item.sortOrder,
+    }).select().single();
+    if (error) throw error;
+    this.emit();
+    return listFrom(data);
+  }
+
+  async deleteListItem(entity: keyof typeof listKind, item: ManagedListItem) {
+    await this.ready;
+    const db = supabase as any;
+    const { error } = await db.from('list_items').delete().eq('id', item.id).eq('event_id', this.currentEventId).eq('kind', listKind[entity]);
+    if (!error) { this.emit(); return { deactivated: false }; }
+    const isReferenceError = error.code === '23503';
+    if (!isReferenceError) throw error;
+    const { error: deactivateError } = await db.from('list_items').update({ is_active: false }).eq('id', item.id).eq('event_id', this.currentEventId);
+    if (deactivateError) throw deactivateError;
+    this.emit();
+    return { deactivated: true };
+  }
+
+  async saveProgramme(programme: Programme) {
+    await this.ready;
+    const { error } = await (supabase as any).from('programmes').upsert({
+      id: programme.id,
+      event_id: this.currentEventId,
+      title: programme.title,
+      description: programme.description || null,
+      day: programme.date,
+      start_time: programme.startTime || null,
+      end_time: programme.endTime || null,
+      location: programme.location || null,
+      is_active: programme.active,
+      sort_order: programme.sortOrder,
+    });
+    if (error) throw error;
+    this.emit();
+  }
+
+  async deleteProgramme(id: string) {
+    await this.ready;
+    const { error } = await (supabase as any).from('programmes').delete().eq('id', id).eq('event_id', this.currentEventId);
+    if (error) throw error;
+    this.emit();
+  }
+
+  async assignConventionRole(userEmail: string, role: ConventionRoleName) {
+    await this.ready;
+    const db = supabase as any;
+    const { data: profile, error: profileError } = await db.from('profiles').select('user_id,email').ilike('email', userEmail.trim()).maybeSingle();
+    if (profileError) throw profileError;
+    if (!profile?.user_id) throw new Error('No account with that email. Create the user in Supabase first.');
+    const { error } = await db.from('convention_roles').insert({ event_id: this.currentEventId, user_id: profile.user_id, role });
+    if (error) throw error;
+    this.emit();
+  }
+
+  async revokeConventionRole(id: string) {
+    await this.ready;
+    const { error } = await (supabase as any).from('convention_roles').delete().eq('id', id).eq('event_id', this.currentEventId);
+    if (error) throw error;
+    this.emit();
+  }
+
+  async updateMember(id: string, updates: Partial<Member>) {
+    await this.ready;
+    const payload: Row = {};
+    if (updates.fullName !== undefined) payload.full_name = updates.fullName;
+    if (updates.phoneNumber !== undefined) payload.phone = updates.phoneNumber;
+    if (updates.email !== undefined) payload.email = updates.email;
+    if (updates.address !== undefined) payload.address = updates.address;
+    if (updates.occupation !== undefined) payload.occupation = updates.occupation;
+    const { error } = await (supabase as any).from('members').update(payload).eq('id', id).eq('event_id', this.currentEventId);
+    if (error) throw error;
+    this.emit();
+  }
+
+  async deleteMember(id: string) {
+    await this.ready;
+    const db = supabase as any;
+    const [{ count: attendanceCount, error: attendanceError }, { count: claimsCount, error: claimsError }] = await Promise.all([
+      db.from('attendance').select('*', { count: 'exact', head: true }).eq('member_id', id).eq('event_id', this.currentEventId),
+      db.from('resource_claims').select('*', { count: 'exact', head: true }).eq('member_id', id).eq('event_id', this.currentEventId),
+    ]);
+    if (attendanceError ?? claimsError) throw attendanceError ?? claimsError;
+    if ((attendanceCount ?? 0) > 0 || (claimsCount ?? 0) > 0) throw new Error('This member has attendance or claim records and cannot be deleted. Archiving requires a schema migration.');
+    const { error } = await db.from('members').delete().eq('id', id).eq('event_id', this.currentEventId);
+    if (error) throw error;
+    this.emit();
+  }
 
   private async resolveActiveEvent() {
     const db = supabase as any;
