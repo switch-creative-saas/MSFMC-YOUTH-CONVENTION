@@ -34,14 +34,14 @@ Deno.serve(async request => {
     const { data: member, error } = await db.from('members').select('id,event_id,status_token').eq('id', parsed.data.member_id).eq('status_token', parsed.data.status_token).maybeSingle();
     if (error || !member) return json(request, { error: 'Registration was not found.' }, 404);
 
-    const extension = parsed.data.kind === 'photo' ? 'jpg' : 'png';
+    const extension = parsed.data.kind === 'photo' ? 'jpg' : 'pdf';
     const path = `${member.event_id}/${member.id}.${extension}`;
     if (parsed.data.action === 'attach') {
       if (parsed.data.path !== path) return json(request, { error: 'Invalid attachment path.' }, 422);
       const { data: files, error: listError } = await db.storage.from(BUCKET).list(String(member.event_id), { search: `${member.id}.${extension}` });
       const file = files?.find((candidate: { name: string }) => candidate.name === `${member.id}.${extension}`) as { metadata?: { size?: number; mimetype?: string } } | undefined;
       const maxBytes = parsed.data.kind === 'photo' ? 1024 * 1024 : 1536 * 1024;
-      const expectedMime = parsed.data.kind === 'photo' ? 'image/jpeg' : 'image/png';
+      const expectedMime = parsed.data.kind === 'photo' ? 'image/jpeg' : 'application/pdf';
       if (listError || !file || Number(file.metadata?.size ?? 0) > maxBytes || file.metadata?.mimetype !== expectedMime) return json(request, { error: 'The uploaded file did not meet the required format.' }, 422);
       const { error: updateError } = parsed.data.kind === 'photo' ? await db.from('members').update({ photo_path: path }).eq('id', member.id) : { error: null };
       if (updateError) throw updateError;
@@ -50,10 +50,10 @@ Deno.serve(async request => {
 
     const options = parsed.data.kind === 'photo'
       ? { contentType: 'image/jpeg', upsert: true }
-      : { contentType: 'image/png', upsert: true };
+      : { contentType: 'application/pdf', upsert: true };
     const { data, error: signedError } = await db.storage.from(BUCKET).createSignedUploadUrl(path, options);
     if (signedError || !data) throw signedError ?? new Error('Unable to create upload URL.');
-    return json(request, { path, token: data.token, signedUrl: data.signedUrl, contentType: options.contentType, maxBytes: parsed.data.kind === 'photo' ? 1024 * 1024 : 1536 * 1024 });
+    return json(request, { path, token: data.token, signedUrl: data.signedUrl, contentType: options.contentType, maxBytes: parsed.data.kind === 'photo' ? 1024 * 1024 : 3 * 1024 * 1024 });
   } catch (error) {
     console.error('upload-url failed', { message: error instanceof Error ? error.message : 'unknown' });
     return json(request, { error: 'Upload could not be prepared.' }, 500);

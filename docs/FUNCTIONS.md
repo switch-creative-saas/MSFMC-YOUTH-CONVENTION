@@ -8,17 +8,21 @@ Deploy the Edge Functions:
 supabase functions deploy register
 supabase functions deploy upload-url
 supabase functions deploy send-registration-email
+supabase functions deploy email-admin
+supabase functions deploy resend-webhook
 ```
 
 Set server-only secrets before deploying. Do not put any of these values in `.env.local`, `.env.example`, or frontend code:
 
 ```sh
-supabase secrets set RESEND_API_KEY=... EMAIL_FROM="MOSYF Convention <noreply@example.org>" APP_URL=https://portal.example.org RATE_LIMIT_SALT=... ALLOWED_ORIGIN=https://portal.example.org
+supabase secrets set RESEND_API_KEY=... RESEND_TEMPLATE_ID=... RESEND_WEBHOOK_SECRET=... EMAIL_FROM="MOSYF Convention <noreply@example.org>" NEXT_PUBLIC_APP_URL=https://portal.example.org RATE_LIMIT_SALT=... ALLOWED_ORIGIN=https://portal.example.org
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY` is supplied by the Supabase platform runtime. The function reads it only from its server environment.
 
-Apply [002_storage_and_email_schedule.sql](../supabase/migrations/002_storage_and_email_schedule.sql) after `001_init.sql`. It creates the private asset bucket and schedules the email worker every five minutes when the two named Vault values exist. Add the project URL and service-role key to Vault first, then rerun the migration block if it reported that scheduling was skipped. This keeps the schedule authorization secret out of source control.
+In Resend, register `https://YOUR_PROJECT.supabase.co/functions/v1/resend-webhook` for `email.delivered`, `email.bounced`, `email.complained`, `email.failed`, and `email.suppressed`, then store its signing secret as `RESEND_WEBHOOK_SECRET`. This is what upgrades the dashboard from “accepted” to actual delivery status.
+
+Apply [002_storage_and_email_schedule.sql](../supabase/migrations/002_storage_and_email_schedule.sql), [003_first_run_setup.sql](../supabase/migrations/003_first_run_setup.sql), and [004_email_delivery_tracking.sql](../supabase/migrations/004_email_delivery_tracking.sql) after `001_init.sql`. The storage migration creates the private asset bucket and schedules the email worker every five minutes when the two named Vault values exist. Add the project URL and service-role key to Vault first, then rerun the migration block if it reported that scheduling was skipped. This keeps the schedule authorization secret out of source control.
 
 ## Smoke test
 

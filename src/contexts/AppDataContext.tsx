@@ -165,6 +165,11 @@ const MOCK_FIRST_TIMERS: FirstTimer[] = MOCK_MEMBERS.filter(m => m.isFirstTimer)
   followedUp: Math.random() > 0.3,
 }));
 
+// Legacy seed fixtures are retained only for a future data migration and are never loaded.
+void MOCK_EXECUTIVES;
+void MOCK_ATTENDANCE;
+void MOCK_FIRST_TIMERS;
+
 const DEFAULT_SETTINGS: ConventionSettings = {
   name: '', startDate: '', endDate: '', location: '', theme: '', scripture: '', isActive: false, maxAttendees: 0, sessions: [],
 };

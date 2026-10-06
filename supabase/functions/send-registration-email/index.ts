@@ -1,6 +1,7 @@
 import { corsHeaders, isAllowedOrigin } from '../_shared/cors.ts';
 import { serviceClient } from '../_shared/client.ts';
 import { json } from '../_shared/http.ts';
+import { Resend } from 'npm:resend@6.12.4';
 
 const BUCKET = 'mosyf-private';
 const SUBJECT = 'Your MOSYF Convention Registration is Confirmed';
@@ -33,13 +34,19 @@ async function sendWithResend(payload: Record<string, unknown>) {
   const apiKey = Deno.env.get('RESEND_API_KEY');
   const from = Deno.env.get('EMAIL_FROM');
   if (!apiKey || !from) throw new Error('Email delivery is not configured.');
-  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from, ...payload }) });
-  if (!response.ok) {
-    const detail = await response.text();
-    const error = new Error(`RESEND_${response.status}:${detail.slice(0, 300)}`);
-    (error as Error & { retryable?: boolean }).retryable = response.status === 429;
-    throw error;
+  const resend = new Resend(apiKey);
+  const templateId = Deno.env.get('RESEND_TEMPLATE_ID');
+  const variables = payload.variables as Record<string, string> | undefined;
+  const { data, error } = await resend.emails.send(templateId && variables
+    ? { from, to: payload.to as string[], subject: SUBJECT, template: { id: templateId, variables } }
+    : { from, to: payload.to as string[], subject: SUBJECT, html: payload.html as string, text: payload.text as string, attachments: payload.attachments as never });
+  if (error) {
+    const message = `${error.name ?? 'RESEND_ERROR'}:${error.message ?? 'Email provider rejected the message.'}`;
+    const providerError = new Error(message);
+    (providerError as Error & { retryable?: boolean }).retryable = /429|rate|quota/i.test(message);
+    throw providerError;
   }
+  return data?.id ?? null;
 }
 
 Deno.serve(async request => {
@@ -64,20 +71,22 @@ Deno.serve(async request => {
       ]);
       const departmentIds = (departmentRows ?? []).map((item: { department_id: string }) => item.department_id);
       const { data: departments } = departmentIds.length ? await db.from('list_items').select('name').in('id', departmentIds) : { data: [] };
-      const appUrl = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
+      const appUrl = (Deno.env.get('NEXT_PUBLIC_APP_URL') ?? Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
       const statusUrl = `${appUrl}/#/status/${member.status_token}`;
+      const { data: tagUrl } = await db.storage.from(BUCKET).createSignedUrl(`${member.event_id}/${member.id}.pdf`, 60 * 60 * 24 * 30);
+      const registrationType = executive ? 'Executive' : 'Member';
       const model = { member, event, band: band?.name ?? 'No Band', departments: (departments ?? []).map((item: { name: string }) => item.name), isExecutive: Boolean(executive), statusUrl };
-      const tagPath = `${member.event_id}/${member.id}.png`;
+      const tagPath = `${member.event_id}/${member.id}.pdf`;
       const { data: tag } = await db.storage.from(BUCKET).download(tagPath);
-      const attachments = tag ? [{ filename: `MOSYF-Tag-${member.member_code}.png`, content: base64(new Uint8Array(await tag.arrayBuffer())) }] : undefined;
+      const attachments = tag ? [{ filename: `MOSYF-Tag-${member.member_code}.pdf`, content: base64(new Uint8Array(await tag.arrayBuffer())) }] : undefined;
       try {
-        await sendWithResend({ to: [row.to_email], subject: SUBJECT, html: emailHtml(model), text: plainText(model), attachments });
-        await db.from('email_outbox').update({ status: 'sent', sent_at: new Date().toISOString(), last_error: null }).eq('id', row.id);
+        const providerId = await sendWithResend({ to: [row.to_email], subject: SUBJECT, html: emailHtml(model), text: plainText(model), attachments, variables: { FULL_NAME: member.full_name, MEMBER_ID: executive?.exec_code ?? member.member_code, REGISTRATION_TYPE: registrationType, GROUP: `Group ${member.convention_group}`, BAND: model.band || 'Not applicable', DEPARTMENT: model.departments.join(', ') || 'Not applicable', ROLE: executive?.leadership_role ?? 'Not applicable', TAG_PDF_URL: tagUrl?.signedUrl ?? 'Not applicable', STATUS_PORTAL_URL: statusUrl } });
+        await db.from('email_outbox').update({ status: 'sent', delivery_status: 'accepted', provider_message_id: providerId, sent_at: new Date().toISOString(), last_attempt_at: new Date().toISOString(), last_error: null }).eq('id', row.id);
         sent++;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Email delivery failed.';
         if ((error as Error & { retryable?: boolean }).retryable) break;
-        await db.from('email_outbox').update({ attempts: row.attempts + 1, last_error: message.slice(0, 500) }).eq('id', row.id);
+        await db.from('email_outbox').update({ attempts: row.attempts + 1, delivery_status: 'failed', last_attempt_at: new Date().toISOString(), last_error: message.slice(0, 500) }).eq('id', row.id);
         failed++;
       }
     }

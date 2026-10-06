@@ -504,7 +504,10 @@ export function MemberRegistration() {
         if (form.profilePhoto) await uploadRegistrationAsset('photo', registeredMember.id, registeredMember.statusToken!, dataUrlToBlob(form.profilePhoto));
         if (tagRef.current) {
           const dataUrl = await toPng(tagRef.current, { cacheBust: true, pixelRatio: 2 });
-          await uploadRegistrationAsset('tag', registeredMember.id, registeredMember.statusToken!, dataUrlToBlob(dataUrl));
+          const { jsPDF } = await import('jspdf');
+          const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [595, 842] });
+          pdf.addImage(dataUrl, 'PNG', 0, 0, 595, 842);
+          await uploadRegistrationAsset('tag', registeredMember.id, registeredMember.statusToken!, pdf.output('blob'));
         }
         if (!cancelled) setUploadedMemberId(registeredMember.id);
       } catch {

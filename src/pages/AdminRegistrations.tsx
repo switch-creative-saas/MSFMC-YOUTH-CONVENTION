@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link2, ShieldCheck, Copy, QrCode, Trash2, Search, Download, FileSpreadsheet } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -27,6 +27,7 @@ export function AdminRegistrations() {
   const [qrUrl, setQrUrl] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [memberPage, setMemberPage] = useState(0);
+  const [emails, setEmails] = useState<Array<{ id: string; to_email: string; delivery_status: string; sent_at: string | null; last_error: string | null }>>([]);
   const PAGE_SIZE = 10;
 
   const filteredMembers = members.filter(m => {
@@ -38,6 +39,20 @@ export function AdminRegistrations() {
 
   const paginatedMembers = filteredMembers.slice(memberPage * PAGE_SIZE, (memberPage + 1) * PAGE_SIZE);
   const totalPages = Math.ceil(filteredMembers.length / PAGE_SIZE);
+
+  const loadEmails = async () => {
+    const { data: session } = await supabase.auth.getSession();
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-admin`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session?.access_token ?? ''}` }, body: JSON.stringify({ eventId: currentEventId }) });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setEmails(data.emails ?? []);
+  };
+  useEffect(() => { if (currentEventId) void loadEmails(); }, [currentEventId]);
+  const resendEmail = async (id: string) => {
+    const { data: session } = await supabase.auth.getSession();
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-admin`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session?.access_token ?? ''}` }, body: JSON.stringify({ action: 'resend', eventId: currentEventId, outboxId: id }) });
+    if (!response.ok) { addToast({ type: 'error', title: 'Email could not be queued.' }); return; }
+    addToast({ type: 'success', title: 'Confirmation email queued for retry.' }); void loadEmails();
+  };
 
   const generateLink = async (type: 'member' | 'executive') => {
     const { data, error } = await (supabase as any).from('registration_links').insert({ event_id: currentEventId, kind: type }).select('token').single();
@@ -109,6 +124,11 @@ export function AdminRegistrations() {
             </div>
           </motion.button>
         </div>
+      </motion.div>
+
+      <motion.div className="portal-card mt-6 min-w-0 p-4 sm:p-6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="mb-4 flex items-center justify-between"><h3 className="font-display text-lg font-semibold text-portal-ink dark:text-white">Confirmation Emails</h3><button onClick={() => void loadEmails()} className="rounded-full border border-portal-line px-3 py-1.5 text-xs text-portal-ink">Refresh</button></div>
+        {emails.length === 0 ? <p className="text-sm text-portal-label">No confirmation emails have been queued yet.</p> : <div className="table-scroll"><DataTable className="fit-table"><thead><tr className="border-b border-portal-line"><th className="pb-3 text-left text-xs uppercase text-portal-label">Recipient</th><th className="pb-3 text-left text-xs uppercase text-portal-label">Status</th><th className="pb-3 text-left text-xs uppercase text-portal-label">Sent</th><th className="pb-3 text-left text-xs uppercase text-portal-label">Action</th></tr></thead><tbody>{emails.map(email => <tr key={email.id} className="border-b border-portal-line"><td className="py-3 pr-4 text-sm text-portal-ink">{email.to_email}</td><td className="py-3 pr-4 text-sm text-portal-label">{email.delivery_status}</td><td className="py-3 pr-4 text-sm text-portal-label">{email.sent_at ? new Date(email.sent_at).toLocaleString() : 'Not sent'}</td><td className="py-3">{email.delivery_status === 'failed' ? <button onClick={() => void resendEmail(email.id)} className="rounded-full border border-portal-line px-3 py-1.5 text-xs text-portal-ink">Resend</button> : <span className="text-xs text-portal-label">{email.last_error ? 'Failed' : '—'}</span>}</td></tr>)}</tbody></DataTable></div>}
       </motion.div>
 
       {/* Generated Links */}
