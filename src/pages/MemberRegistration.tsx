@@ -455,7 +455,7 @@ export function MemberRegistration() {
       const response = await submitRegistration(token, {
         id: crypto.randomUUID(), full_name: form.fullName.trim(), phone: form.phoneNumber.trim(), email: normalizedEmail,
         gender: form.gender.toLowerCase(), date_of_birth: form.dateOfBirth, address: form.address.trim(), occupation: form.occupation.trim(),
-        emergency_contact: form.emergencyContact.trim(), photo_path: form.profilePhoto, band_id: band?.id ?? '', church_location_id: churchLocation?.id ?? '',
+        emergency_contact: form.emergencyContact.trim(), band_id: band?.id ?? '', church_location_id: churchLocation?.id ?? '',
         department_ids: departments.filter(item => form.departments.includes(item.name as Department)).map(item => item.id),
         is_first_timer: form.isFirstTimer === true, wants_permanent: form.isFirstTimer ? form.wantsPermanentMembership === true : false,
         consent: true, guardian_consent: form.guardianConsent, client_created_at: new Date().toISOString(),
